@@ -1,0 +1,12 @@
+
+# Run gitleaks to detect secrets
+echo "🔍 Running gitleaks to check for secrets..."
+gitleaks detect --source . --verbose --redact
+
+# Run linting
+echo "📝 Running ESLint..."
+npm run lint
+
+# Run type checking
+echo "🔧 Running TypeScript type check..."
+npm run typecheck

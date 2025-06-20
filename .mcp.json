@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "claude-code Docs": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://gitmcp.io/anthropics/claude-code"
+      ]
+    },
+    "claude-code-sdk-python Docs": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://gitmcp.io/anthropics/claude-code-sdk-python"
+      ]
+    },
+    "mastra Docs": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://gitmcp.io/mastra-ai/mastra"
+      ]
+    },
+    "typescript": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-typescript"
+      ]
+    }
+  }
+}
