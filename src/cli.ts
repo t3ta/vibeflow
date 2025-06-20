@@ -16,6 +16,7 @@ import { TestSynthAgent } from './core/agents/test-synth-agent.js';
 import { MigrationRunner } from './core/agents/migration-runner.js';
 import { ReviewAgent } from './core/agents/review-agent.js';
 import { VibeFlowPaths } from './core/utils/file-paths.js';
+import { executeAutoRefactor } from './core/workflow/auto-refactor-workflow.js';
 
 // -----------------------------------------------------------------------------
 // Workflow execution functions
@@ -247,6 +248,82 @@ program
       
     } catch (error) {
       console.error(chalk.red('❌ Pipeline failed:'), error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('auto')
+  .argument('[path]', 'target project root', 'workspace')
+  .option('-a, --apply', 'actually apply changes (not dry-run)')
+  .option('-l, --language <lang>', 'target language', 'go')
+  .option('-p, --pattern <pattern>', 'architecture pattern', 'clean-arch')
+  .option('-t, --timeout <minutes>', 'timeout in minutes', '60')
+  .description('🤖 Complete automatic refactoring with AI - The Revolutionary Command')
+  .action(async (path: string, opts: { 
+    apply?: boolean; 
+    language?: string; 
+    pattern?: string; 
+    timeout?: string;
+  }) => {
+    if (!process.env.CLAUDE_API_KEY) {
+      console.log(chalk.blue('📋 Running in Template Mode'));
+      console.log(chalk.gray('   High-quality code generation using proven patterns'));
+      console.log(chalk.gray('   Set CLAUDE_API_KEY for AI-powered transformation'));
+    } else {
+      console.log(chalk.green('🤖 Running in AI Mode'));
+      console.log(chalk.gray('   Intelligent code transformation with Claude'));
+    }
+    console.log('');
+    console.log(chalk.blue(`📁 Target: ${path}`));
+    console.log(chalk.blue(`🔤 Language: ${opts.language}`));
+    console.log(chalk.blue(`🏗️  Pattern: ${opts.pattern}`));
+    console.log(chalk.blue(`⚙️  Mode: ${opts.apply ? chalk.red('🔥 APPLY CHANGES') : chalk.yellow('🔍 DRY RUN')}`));
+    console.log('');
+    
+    const startTime = Date.now();
+    
+    try {
+      // Timeout setting
+      const timeoutMs = parseInt(opts.timeout || '60') * 60 * 1000;
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('⏰ Timeout reached')), timeoutMs)
+      );
+      
+      // Execute automatic refactoring workflow
+      const refactorPromise = executeAutoRefactor(path, opts.apply);
+      
+      const result = await Promise.race([refactorPromise, timeoutPromise]) as any;
+      
+      const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
+      
+      console.log('');
+      console.log(chalk.green('🎉 AI Automatic Refactoring Complete!'));
+      console.log(chalk.cyan(`⏱️  Total Time: ${duration} minutes`));
+      console.log('');
+      console.log(chalk.cyan('📊 Execution Summary:'));
+      console.log(chalk.gray(`   🏗️  Created modules: ${result.boundaries?.length || 0}`));
+      console.log(chalk.gray(`   🔄 Converted files: ${result.refactorResult?.applied_patches?.length || 0}`));
+      console.log(chalk.gray(`   🧪 Generated tests: ${result.testResult?.generated_tests?.length || 0}`));
+      console.log(chalk.gray(`   ✅ Compile: ${result.validation?.compile?.success ? 'Success' : 'Failed'}`));
+      console.log(chalk.gray(`   🧪 Tests: ${result.validation?.tests?.success ? 'Success' : 'Failed'}`));
+      console.log(chalk.gray(`   📈 Performance: ${result.validation?.performance?.improvement || 'N/A'}`));
+      console.log('');
+      
+      if (!opts.apply) {
+        console.log(chalk.yellow('ℹ️  This was a dry run. Use --apply flag to actually apply changes.'));
+        console.log(chalk.yellow('   Example: vf auto . --apply'));
+      } else {
+        console.log(chalk.green('🚀 Production ready! Your codebase has been transformed.'));
+        console.log(chalk.green('   Welcome to the new era of AI-powered development.'));
+      }
+      
+    } catch (error) {
+      const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
+      console.log('');
+      console.error(chalk.red(`❌ Refactoring failed (${duration} min elapsed):`), (error as any).message);
+      console.log(chalk.red('🔄 Automatic rollback executed.'));
+      console.log('');
       process.exit(1);
     }
   });

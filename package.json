@@ -2,7 +2,7 @@
   "name": "vibeflow",
   "version": "0.1.0",
   "type": "module",
-  "description": "Autonomous refactoring pipeline that transforms monolithic backend codebases into cleanly separated modular monoliths",
+  "description": "Intelligent code refactoring with template-based generation and AI capabilities (coming soon)",
   "author": "Takahito Mita",
   "license": "MIT",
   "bin": {
@@ -46,9 +46,14 @@
   },
   "keywords": [
     "refactoring",
+    "clean-architecture",
+    "code-generation",
+    "template-engine",
     "modular-monolith",
     "code-transformation",
     "ai-powered",
+    "domain-driven-design",
+    "ddd",
     "claude",
     "mastra"
   ]

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { RefactorPlan, CodePatch } from './refactor-agent.js';
+import { RefactorPlan, RefactorPatch } from './refactor-agent.js';
 import { VibeFlowConfig } from '../types/config.js';
 import { ConfigLoader } from '../utils/config-loader.js';
 import { CodeAnalyzer, FileInfo } from '../utils/code-analyzer.js';
@@ -111,9 +111,9 @@ export class TestSynthAgent {
     
     // Find tests that need to be moved based on refactor patches
     for (const patch of refactorPlan.patches) {
-      if (patch.action === 'create' && patch.file.startsWith('internal/')) {
-        const module = this.extractModuleName(patch.file);
-        const relatedTests = this.findRelatedTests(patch.file, existingTests);
+      if (patch.changes.some(c => c.type === 'create') && patch.target_file.startsWith('internal/')) {
+        const module = this.extractModuleName(patch.target_file);
+        const relatedTests = this.findRelatedTests(patch.target_file, existingTests);
         
         for (const test of relatedTests) {
           const newLocation = this.generateTestLocation(module, test.relativePath);
@@ -135,23 +135,23 @@ export class TestSynthAgent {
     const existingTestPaths = new Set(existingTests.map(t => t.relativePath));
     
     for (const patch of refactorPlan.patches) {
-      if (patch.action === 'create') {
-        const module = this.extractModuleName(patch.file);
+      if (patch.changes.some(c => c.type === 'create')) {
+        const module = this.extractModuleName(patch.target_file);
         
         // Generate unit tests for new interfaces
-        if (patch.file.includes('interface.go')) {
+        if (patch.target_file.includes('interface.go')) {
           const unitTest = this.generateInterfaceUnitTest(module, patch);
           generatedTests.push(unitTest);
         }
         
         // Generate integration tests for new handlers
-        if (patch.file.includes('handler')) {
+        if (patch.target_file.includes('handler')) {
           const integrationTest = this.generateHandlerIntegrationTest(module, patch);
           generatedTests.push(integrationTest);
         }
         
         // Generate repository tests
-        if (patch.file.includes('repository')) {
+        if (patch.target_file.includes('repository')) {
           const repoTest = this.generateRepositoryTest(module, patch);
           generatedTests.push(repoTest);
         }
@@ -159,7 +159,7 @@ export class TestSynthAgent {
     }
     
     // Generate E2E tests for module interactions
-    const modules = [...new Set(refactorPlan.patches.map(p => this.extractModuleName(p.file)))];
+    const modules = [...new Set(refactorPlan.patches.map(p => this.extractModuleName(p.target_file)))];
     if (modules.length > 1) {
       const e2eTest = this.generateE2ETest(modules);
       generatedTests.push(e2eTest);
@@ -191,12 +191,12 @@ export class TestSynthAgent {
     return `internal/${module}/test/${fileName}`;
   }
 
-  private calculateTestDependencies(test: FileInfo, patch: CodePatch): string[] {
+  private calculateTestDependencies(test: FileInfo, patch: RefactorPatch): string[] {
     // Simple implementation - return imports that might need updating
-    return test.imports.filter(imp => imp.includes(patch.file.replace('.go', '')));
+    return test.imports.filter(imp => imp.includes(patch.target_file.replace('.go', '')));
   }
 
-  private generateInterfaceUnitTest(module: string, patch: CodePatch): GeneratedTest {
+  private generateInterfaceUnitTest(module: string, patch: RefactorPatch): GeneratedTest {
     const interfaceName = `I${this.capitalize(module)}Service`;
     const content = `package ${module}_test
 
@@ -271,7 +271,7 @@ func TestCreate_Success(t *testing.T) {
     };
   }
 
-  private generateHandlerIntegrationTest(module: string, patch: CodePatch): GeneratedTest {
+  private generateHandlerIntegrationTest(module: string, patch: RefactorPatch): GeneratedTest {
     const content = `package ${module}_test
 
 import (
@@ -339,7 +339,7 @@ func TestHandler_Create_Success(t *testing.T) {
     };
   }
 
-  private generateRepositoryTest(module: string, patch: CodePatch): GeneratedTest {
+  private generateRepositoryTest(module: string, patch: RefactorPatch): GeneratedTest {
     const content = `package ${module}_test
 
 import (
