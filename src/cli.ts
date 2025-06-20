@@ -8,11 +8,79 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { mastra } from './core/mastra';
+import { BoundaryAgent } from './core/agents/boundary-agent.js';
+import { EnhancedBoundaryAgent } from './core/agents/enhanced-boundary-agent.js';
+import { ArchitectAgent } from './core/agents/architect-agent.js';
+import { RefactorAgent } from './core/agents/refactor-agent.js';
+import { TestSynthAgent } from './core/agents/test-synth-agent.js';
+import { MigrationRunner } from './core/agents/migration-runner.js';
+import { ReviewAgent } from './core/agents/review-agent.js';
+import { VibeFlowPaths } from './core/utils/file-paths.js';
 
 // -----------------------------------------------------------------------------
 // Workflow execution functions
 // -----------------------------------------------------------------------------
+async function runAutomaticBoundaryDiscovery(projectRoot: string): Promise<void> {
+  const absolutePath = path.resolve(projectRoot);
+  
+  // Verify project exists
+  try {
+    await fs.access(absolutePath);
+  } catch {
+    throw new Error(`Project directory not found: ${absolutePath}`);
+  }
+
+  console.log(chalk.blue(`🤖 AI自動境界発見: ${absolutePath}`));
+  console.log(chalk.gray('設定ファイル不要 - AIが完全自動でモジュール境界を発見します'));
+  
+  try {
+    // AI完全自動境界発見（設定ファイルなしで実行）
+    const enhancedBoundaryAgent = new EnhancedBoundaryAgent(absolutePath, undefined, undefined);
+    const boundaryResult = await enhancedBoundaryAgent.analyzeBoundaries();
+    
+    console.log(chalk.green('✨ AI自動境界発見完了!'));
+    console.log(chalk.cyan('\n📊 発見結果サマリ:'));
+    console.log(chalk.gray(`   🎯 発見された境界: ${boundaryResult.autoDiscoveredBoundaries.length}個`));
+    console.log(chalk.gray(`   📈 全体信頼度: ${boundaryResult.discoveryMetrics.confidence_metrics.overall_confidence.toFixed(1)}%`));
+    console.log(chalk.gray(`   🏗️  構造一貫性: ${boundaryResult.discoveryMetrics.confidence_metrics.structural_coherence.toFixed(1)}%`));
+    console.log(chalk.gray(`   🗄️  DB整合性: ${boundaryResult.discoveryMetrics.confidence_metrics.database_alignment.toFixed(1)}%`));
+    
+    console.log(chalk.cyan('\n🎯 発見された境界:'));
+    boundaryResult.autoDiscoveredBoundaries
+      .slice(0, 10)
+      .forEach((boundary, i) => {
+        console.log(chalk.gray(`   ${i + 1}. ${boundary.name} (信頼度${(boundary.confidence * 100).toFixed(1)}%)`));
+        console.log(chalk.gray(`      └─ ${boundary.description}`));
+        console.log(chalk.gray(`      └─ ファイル数: ${boundary.files.length}, キーワード: ${boundary.semantic_keywords.slice(0, 3).join(', ')}`));
+      });
+    
+    if (boundaryResult.discoveryMetrics.recommendations.length > 0) {
+      console.log(chalk.yellow('\n💡 AI推奨事項:'));
+      boundaryResult.discoveryMetrics.recommendations
+        .slice(0, 5)
+        .forEach((rec, i) => {
+          console.log(chalk.gray(`   ${i + 1}. ${rec.reason}`));
+          console.log(chalk.gray(`      └─ ${rec.expected_benefit}`));
+        });
+    }
+    
+    const paths = new VibeFlowPaths(absolutePath);
+    console.log(chalk.green('\n📄 Generated files:'));
+    console.log(chalk.gray(`   - ${paths.getRelativePath(boundaryResult.outputPath)} (ドメインマップ)`));
+    console.log(chalk.gray(`   - ${paths.getRelativePath(paths.autoBoundaryReportPath)} (詳細レポート)`));
+    
+    console.log(chalk.cyan('\n✨ 次のステップ:'));
+    console.log(chalk.gray('   1. 生成されたドメインマップを確認'));
+    console.log(chalk.gray('   2. 必要に応じてvibeflow.config.yamlを作成'));
+    console.log(chalk.gray('   3. vf plan でアーキテクチャ設計を実行'));
+    console.log(chalk.gray('   4. vf refactor で実際のリファクタリングを実行'));
+    
+  } catch (error) {
+    console.error(chalk.red('❌ Error in automatic boundary discovery:'), error);
+    throw error;
+  }
+}
+
 async function planTasks(projectRoot: string): Promise<void> {
   const absolutePath = path.resolve(projectRoot);
   
@@ -25,61 +93,100 @@ async function planTasks(projectRoot: string): Promise<void> {
 
   console.log(chalk.blue(`📂 Analyzing project: ${absolutePath}`));
   
-  // TODO: Mastra APIの変更に対応した実装に更新
-  console.log(chalk.yellow('⚠️  Workflow execution is temporarily disabled'));
-  console.log(chalk.yellow('   Using stub implementation'));
-  
-  
-  // スタブ実装
-  console.log(chalk.gray('🔍 Analyzing codebase structure...'));
-  console.log(chalk.gray('  (BoundaryAgent implementation pending)'));
-  console.log(chalk.gray('🏗️  Designing modular architecture...'));
-  console.log(chalk.gray('  (ArchitectAgent implementation pending)'));
-  
-  console.log(chalk.green('✅ Plan generation complete!'));
-  console.log(chalk.gray('📄 Generated files:'));
-  console.log(chalk.gray('   - domain-map.json (stub)'));
-  console.log(chalk.gray('   - plan.md (stub)'));
+  try {
+    // 1. Enhanced Boundary Analysis (AI + Manual)
+    const enhancedBoundaryAgent = new EnhancedBoundaryAgent(absolutePath);
+    const boundaryResult = await enhancedBoundaryAgent.analyzeBoundaries();
+    
+    // 2. Architectural Design
+    const architectAgent = new ArchitectAgent(absolutePath);
+    const architectResult = await architectAgent.generateArchitecturalPlan(boundaryResult.outputPath);
+    
+    const planPaths = new VibeFlowPaths(absolutePath);
+    console.log(chalk.green('✅ Plan generation complete!'));
+    console.log(chalk.gray('📄 Generated files:'));
+    console.log(chalk.gray(`   - ${planPaths.getRelativePath(boundaryResult.outputPath)}`));
+    console.log(chalk.gray(`   - ${planPaths.getRelativePath(architectResult.outputPath)}`));
+    
+    // Display AI discovery results
+    if (boundaryResult.autoDiscoveredBoundaries.length > 0) {
+      console.log(chalk.cyan('\n🤖 AI自動境界発見結果:'));
+      console.log(chalk.gray(`   発見された境界: ${boundaryResult.autoDiscoveredBoundaries.length}個`));
+      console.log(chalk.gray(`   全体信頼度: ${boundaryResult.discoveryMetrics.confidence_metrics.overall_confidence.toFixed(1)}%`));
+      
+      if (boundaryResult.hybridRecommendations.length > 0) {
+        console.log(chalk.yellow(`   推奨事項: ${boundaryResult.hybridRecommendations.length}個`));
+        boundaryResult.hybridRecommendations.slice(0, 3).forEach((rec, i) => {
+          console.log(chalk.gray(`     ${i + 1}. ${rec.action}`));
+        });
+      }
+    }
+    
+  } catch (error) {
+    console.error(chalk.red('❌ Error in plan generation:'), error);
+    throw error;
+  }
 }
 
 async function runRefactor(projectRoot: string, apply: boolean): Promise<void> {
   const absolutePath = path.resolve(projectRoot);
+  const paths = new VibeFlowPaths(absolutePath);
   
   // Verify required files exist
-  const planPath = path.join(absolutePath, 'plan.md');
-  const domainMapPath = path.join(absolutePath, 'domain-map.json');
+  const planPath = paths.planPath;
+  const domainMapPath = paths.domainMapPath;
   
   try {
     await fs.access(planPath);
     await fs.access(domainMapPath);
   } catch {
     throw new Error(
-      'Required files not found. Please run "vf plan" first to generate plan.md and domain-map.json'
+      `Required files not found. Please run "vf plan" first to generate ${paths.getRelativePath(planPath)} and ${paths.getRelativePath(domainMapPath)}`
     );
   }
 
   console.log(chalk.blue(`🔧 Refactoring project: ${absolutePath}`));
   
-  // TODO: Mastra APIの変更に対応した実装に更新
-  console.log(chalk.yellow('⚠️  Workflow execution is temporarily disabled'));
-  console.log(chalk.yellow('   Using stub implementation'));
-  
-  // スタブ実装
-  const mode = !apply ? 'Dry Run' : 'Auto Apply';
-  console.log(chalk.gray('🔧 Generating refactoring patches...'));
-  console.log(chalk.gray('  (RefactorAgent implementation pending)'));
-  console.log(chalk.gray('🧪 Synthesizing and relocating tests...'));
-  console.log(chalk.gray('  (TestSynthAgent implementation pending)'));
-  console.log(chalk.gray('🚀 Running migration...'));
-  console.log(chalk.gray(`  Mode: ${mode}`));
-  console.log(chalk.gray('  (MigrationRunner implementation pending)'));
-  console.log(chalk.gray('👀 Reviewing changes...'));
-  console.log(chalk.gray('  (ReviewAgent implementation pending)'));
-  
-  console.log(chalk.green('✅ Refactoring complete!'));
-  if (!apply) {
-    console.log(chalk.yellow('ℹ️  Dry run mode - no changes were applied'));
-    console.log(chalk.yellow('   Use --apply flag to apply changes'));
+  try {
+    // 1. Generate refactoring patches
+    const refactorAgent = new RefactorAgent(absolutePath);
+    const refactorResult = await refactorAgent.generateRefactorPlan(planPath);
+    
+    // 2. Synthesize and relocate tests
+    const testSynthAgent = new TestSynthAgent(absolutePath);
+    const testSynthResult = await testSynthAgent.synthesizeTests(paths.patchesDir);
+    
+    // 3. Run migration (apply patches)
+    const migrationRunner = new MigrationRunner(absolutePath, undefined, !apply);
+    const migrationResult = await migrationRunner.executeMigration(paths.patchesDir, apply);
+    
+    // 4. Review changes
+    const reviewAgent = new ReviewAgent(absolutePath);
+    const reviewResult = await reviewAgent.reviewChanges(migrationResult.outputPath);
+    
+    console.log(chalk.green('✅ 完全なリファクタリングパイプライン完了!'));
+    console.log(chalk.gray('📄 Generated files:'));
+    console.log(chalk.gray(`   - ${paths.getRelativePath(refactorResult.outputPath)}/ (${refactorResult.plan.summary.total_patches} patches)`));
+    console.log(chalk.gray(`   - ${paths.getRelativePath(testSynthResult.outputPath)} (${testSynthResult.generated_tests.length} tests)`));
+    console.log(chalk.gray(`   - ${paths.getRelativePath(migrationResult.outputPath)} (migration results)`));
+    console.log(chalk.gray(`   - ${paths.getRelativePath(reviewResult.outputPath)} (review report)`));
+    
+    // Display key results
+    console.log(chalk.cyan('\n📊 実行結果サマリ:'));
+    console.log(chalk.gray(`   パッチ適用: ${migrationResult.applied_patches.length}成功 / ${migrationResult.failed_patches.length}失敗`));
+    console.log(chalk.gray(`   ビルド: ${migrationResult.build_result.success ? '✅ 成功' : '❌ 失敗'}`));
+    console.log(chalk.gray(`   テスト: ${migrationResult.test_result.success ? '✅ 成功' : '❌ 失敗'}`));
+    console.log(chalk.gray(`   総合評価: ${reviewResult.overall_assessment.grade}グレード`));
+    console.log(chalk.gray(`   自動マージ: ${reviewResult.auto_merge_decision.should_auto_merge ? '✅ 可能' : '❌ 手動レビュー必要'}`));
+    
+    if (!apply) {
+      console.log(chalk.yellow('\nℹ️  ドライランモード - 実際の変更は行われていません'));
+      console.log(chalk.yellow('   --applyフラグで実際の変更を適用できます'));
+    }
+    
+  } catch (error) {
+    console.error(chalk.red('❌ Error in refactor execution:'), error);
+    throw error;
   }
 }
 
@@ -101,6 +208,15 @@ program
   });
 
 program
+  .command('discover')
+  .argument('[path]', 'target project root', 'workspace')
+  .description('AI-powered automatic boundary discovery (no config required)')
+  .action(async (path: string) => {
+    console.log(chalk.magenta('▶ AI automatic boundary discovery...'));
+    await runAutomaticBoundaryDiscovery(path);
+  });
+
+program
   .command('refactor')
   .argument('[path]', 'target project root', 'workspace')
   .option('-a, --apply', 'apply patches automatically')
@@ -108,6 +224,31 @@ program
   .action(async (path: string, opts: { apply?: boolean }) => {
     console.log(chalk.green('▶ running refactor...'));
     await runRefactor(path, opts.apply ?? false);
+  });
+
+program
+  .command('full')
+  .argument('[path]', 'target project root', 'workspace')
+  .option('-a, --apply', 'apply patches automatically')
+  .description('Run complete pipeline: plan + refactor')
+  .action(async (path: string, opts: { apply?: boolean }) => {
+    console.log(chalk.cyan('▶ running full pipeline...'));
+    
+    try {
+      // 1. Generate plan
+      console.log(chalk.blue('🔍 Step 1/2: Generating plan...'));
+      await planTasks(path);
+      
+      // 2. Execute refactor
+      console.log(chalk.blue('🔧 Step 2/2: Executing refactor...'));
+      await runRefactor(path, opts.apply ?? false);
+      
+      console.log(chalk.green('🎉 Complete pipeline finished successfully!'));
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Pipeline failed:'), error);
+      process.exit(1);
+    }
   });
 
 // -----------------------------------------------------------------------------

@@ -41,6 +41,7 @@ temp/
 
 # VibeFlow specific
 workspace/
+.vibeflow/
 
 # Security
 gitleaks-report.json
