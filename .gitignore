@@ -41,14 +41,6 @@ temp/
 
 # VibeFlow specific
 workspace/
-workspace/**/domain-map.json
-workspace/**/plan.md
-workspace/**/.refactor/
-workspace/**/metrics.json
-workspace/**/result.json
-workspace/**/coverage-diff.json
-workspace/**/__generated__/
-!workspace/.gitkeep
 
 # Security
 gitleaks-report.json

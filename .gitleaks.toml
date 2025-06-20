@@ -36,7 +36,6 @@ files = [
     '''README.md''',
     '''docs/.*''',
     '''CLAUDE.md''',
-    '''workspace/.*''',
     '''.claude/.*'''
 ]
 
@@ -44,6 +43,7 @@ paths = [
     '''node_modules/.*''',
     '''dist/.*''',
     '''\.git/.*''',
+    '''workspace/.*''',
     '''.*\.test\..*''',
     '''.*\.spec\..*'''
 ]
