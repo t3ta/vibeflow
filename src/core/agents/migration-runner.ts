@@ -6,6 +6,7 @@ import { RefactorPlan, RefactorPatch } from './refactor-agent.js';
 import { VibeFlowConfig } from '../types/config.js';
 import { ConfigLoader } from '../utils/config-loader.js';
 import { VibeFlowPaths } from '../utils/file-paths.js';
+import { BuildFixerAgent, BuildError } from './build-fixer-agent.js';
 
 const execAsync = promisify(exec);
 
@@ -465,6 +466,23 @@ export class MigrationRunner {
       const errors = this.parseGoErrors(error.stderr || error.message);
       
       console.log(`❌ ビルド失敗 (${duration}ms)`);
+      console.log('🔧 BuildFixerAgentによる自動修復を試行中...');
+      
+      // Convert errors to BuildError format
+      const buildErrors: BuildError[] = this.convertToBuildErrors(errors, error.stderr || error.message);
+      
+      // Attempt to fix build errors
+      const fixResult = await this.attemptBuildFix(buildErrors);
+      
+      if (fixResult.buildResult.success) {
+        console.log(`✅ ビルド修復成功！`);
+        return {
+          success: true,
+          errors: [],
+          warnings: [`Build fixed automatically by BuildFixerAgent (${fixResult.summary.fixedErrors} errors fixed)`],
+          duration_ms: Date.now() - startTime,
+        };
+      }
       
       return {
         success: false,
@@ -628,6 +646,68 @@ export class MigrationRunner {
     
     // For now, return true (auto-approve) since we don't have interactive prompting
     return true;
+  }
+
+  private convertToBuildErrors(errors: string[], stderr: string): BuildError[] {
+    const buildErrors: BuildError[] = [];
+    const lines = stderr.split('\n');
+    
+    for (const line of lines) {
+      // Parse Go error format: file.go:line:column: error message
+      const match = line.match(/^(.+\.go):(\d+):(\d+):\s*(.+)$/);
+      if (match) {
+        const [, file, lineStr, columnStr, message] = match;
+        
+        // Determine error type
+        let errorType: 'import' | 'type' | 'syntax' | 'dependency' = 'syntax';
+        if (message.includes('cannot find module') || 
+            message.includes('cannot find package') ||
+            message.includes('no required module provides package')) {
+          errorType = 'import';
+        } else if (message.includes('undefined:') || 
+                   message.includes('cannot find type')) {
+          errorType = 'type';
+        } else if (message.includes('import cycle')) {
+          errorType = 'dependency';
+        }
+        
+        buildErrors.push({
+          file: path.join(this.projectRoot, file),
+          line: parseInt(lineStr, 10),
+          column: parseInt(columnStr, 10),
+          type: errorType,
+          message: message,
+          context: line,
+        });
+      }
+    }
+    
+    return buildErrors;
+  }
+
+  private async attemptBuildFix(buildErrors: BuildError[]): Promise<any> {
+    const buildFixer = new BuildFixerAgent();
+    
+    // Load refactoring manifest
+    const manifestPath = path.join(this.paths.patchesDir, 'manifest.json');
+    let refactoringManifest = {};
+    
+    if (fs.existsSync(manifestPath)) {
+      try {
+        refactoringManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      } catch (error) {
+        console.warn('Failed to load refactoring manifest:', error);
+      }
+    }
+    
+    const fixResult = await buildFixer.execute({
+      projectPath: this.projectRoot,
+      buildErrors: buildErrors,
+      refactoringManifest: refactoringManifest,
+      language: 'go', // Detect from project
+    });
+    
+    return fixResult;
   }
 
   private async promptForContinuation(patch: RefactorPatch, error: string): Promise<boolean> {

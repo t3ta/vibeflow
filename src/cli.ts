@@ -19,6 +19,8 @@ import { VibeFlowPaths } from './core/utils/file-paths.js';
 import { executeAutoRefactor } from './core/workflow/auto-refactor-workflow.js';
 import { CostManager } from './core/utils/cost-manager.js';
 import { HybridRefactorAgent } from './core/agents/hybrid-refactor-agent.js';
+import { IncrementalMigrationRunner } from './core/agents/incremental-migration-runner.js';
+import { EnhancedTestSynthAgent } from './core/agents/enhanced-test-synth-agent.js';
 
 // -----------------------------------------------------------------------------
 // Workflow execution functions
@@ -193,6 +195,130 @@ async function runRefactor(projectRoot: string, apply: boolean): Promise<void> {
   }
 }
 
+async function runIncrementalRefactor(projectRoot: string, options: {
+  apply: boolean;
+  maxStageSize: number;
+  resumeFromStage?: number;
+  skipStages: number[];
+}): Promise<void> {
+  const absolutePath = path.resolve(projectRoot);
+  const paths = new VibeFlowPaths(absolutePath);
+  
+  // Check that plan exists
+  const planPath = paths.planPath;
+  const domainMapPath = paths.domainMapPath;
+  
+  try {
+    await fs.access(planPath);
+    await fs.access(domainMapPath);
+  } catch {
+    throw new Error(
+      `Required files not found. Please run "vf plan" first to generate ${paths.getRelativePath(planPath)} and ${paths.getRelativePath(domainMapPath)}`
+    );
+  }
+
+  console.log(chalk.blue(`🔄 インクリメンタルリファクタリング: ${absolutePath}`));
+  console.log(chalk.gray(`⚙️  設定: 最大ステージサイズ=${options.maxStageSize}, スキップ=[${options.skipStages.join(', ')}]`));
+  
+  if (options.resumeFromStage) {
+    console.log(chalk.cyan(`🔂 ステージ${options.resumeFromStage}から再開します`));
+  }
+  
+  try {
+    // 1. Enhanced test synthesis for better coverage
+    console.log(chalk.blue('🧪 Step 1/3: Enhanced test synthesis...'));
+    const enhancedTestSynth = new EnhancedTestSynthAgent();
+    const testSynthResult = await enhancedTestSynth.execute({
+      projectPath: absolutePath,
+      refactoringManifest: {},
+      currentCoverage: 18.6, // From real experiment data
+      targetCoverage: 50,
+      language: 'go',
+      testTypes: ['unit', 'integration'],
+      aiEnabled: true,
+    });
+    
+    console.log(chalk.green(`✅ テスト生成完了: ${testSynthResult.generatedTests.length}個の新規テスト`));
+    console.log(chalk.gray(`   推定カバレッジ向上: ${testSynthResult.coverageImprovement.beforeCoverage}% → ${testSynthResult.coverageImprovement.estimatedAfterCoverage}%`));
+    
+    // 2. Generate refactoring patches
+    console.log(chalk.blue('🏗️  Step 2/3: Generating refactoring patches...'));
+    const refactorAgent = new RefactorAgent(absolutePath);
+    const refactorResult = await refactorAgent.generateRefactorPlan(planPath);
+    
+    // 3. Execute incremental migration
+    console.log(chalk.blue('🔧 Step 3/3: Incremental patch application...'));
+    const incrementalRunner = new IncrementalMigrationRunner();
+    const migrationResult = await incrementalRunner.execute({
+      projectPath: absolutePath,
+      refactorPlanPath: path.join(paths.patchesDir, 'manifest.json'),
+      config: {
+        maxStageSize: options.maxStageSize,
+        maxRetries: 2,
+        buildTimeout: 120000,
+        testTimeout: 300000,
+        continueOnNonCriticalFailure: true,
+        generateProgressReport: true,
+        createStageBackups: options.apply,
+      },
+      resumeFromStage: options.resumeFromStage,
+      skipStages: options.skipStages,
+    });
+    
+    // 4. Generate review report
+    const reviewAgent = new ReviewAgent(absolutePath);
+    const reviewResult = await reviewAgent.reviewChanges(absolutePath);
+    
+    console.log(chalk.green('✅ インクリメンタルリファクタリング完了!'));
+    
+    // Display incremental results
+    console.log(chalk.cyan('\n📊 実行結果サマリ:'));
+    console.log(chalk.gray(`   総ステージ数: ${migrationResult.summary.totalStages}`));
+    console.log(chalk.gray(`   成功ステージ: ${migrationResult.summary.successfulStages} ✅`));
+    console.log(chalk.gray(`   失敗ステージ: ${migrationResult.summary.failedStages} ❌`));
+    console.log(chalk.gray(`   スキップステージ: ${migrationResult.summary.skippedStages} ⏭️`));
+    console.log(chalk.gray(`   パッチ適用: ${migrationResult.summary.appliedPatches}/${migrationResult.summary.totalPatches}`));
+    console.log(chalk.gray(`   最終ビルド: ${migrationResult.summary.finalBuildSuccess ? '✅ 成功' : '❌ 失敗'}`));
+    console.log(chalk.gray(`   最終テスト: ${migrationResult.summary.finalTestSuccess ? '✅ 成功' : '❌ 失敗'}`));
+    console.log(chalk.gray(`   処理時間: ${(migrationResult.summary.processingTime / 1000).toFixed(1)}秒`));
+    
+    // Display recommendations
+    if (migrationResult.recommendations.length > 0) {
+      console.log(chalk.yellow('\n💡 推奨事項:'));
+      migrationResult.recommendations.forEach(rec => {
+        console.log(chalk.yellow(`   - ${rec}`));
+      });
+    }
+    
+    // Display stage details
+    console.log(chalk.cyan('\n📋 ステージ詳細:'));
+    migrationResult.stageResults.forEach(result => {
+      const statusIcon = result.decision === 'continue' ? '✅' : 
+                        result.decision === 'skip' ? '⏭️' : '❌';
+      console.log(chalk.gray(`   ${statusIcon} Stage ${result.stage.id}: ${result.stage.name} (${result.applied.length}/${result.stage.patches.length} patches)`));
+    });
+    
+    if (!options.apply) {
+      console.log(chalk.yellow('\nℹ️  ドライランモード - 実際の変更は行われていません'));
+      console.log(chalk.yellow('   --applyフラグで実際の変更を適用できます'));
+    }
+    
+    // Suggest resume command if there were failures
+    const lastFailedStage = migrationResult.stageResults
+      .filter(r => r.decision === 'abort' || r.decision === 'skip')
+      .pop();
+    
+    if (lastFailedStage && options.apply) {
+      console.log(chalk.cyan(`\n🔂 失敗したステージから再開するには:`));
+      console.log(chalk.cyan(`   vf refactor --incremental --apply --resume-from-stage ${lastFailedStage.stage.id}`));
+    }
+    
+  } catch (error) {
+    console.error(chalk.red('❌ Error in incremental refactor execution:'), error);
+    throw error;
+  }
+}
+
 // -----------------------------------------------------------------------------
 // CLI definition
 // -----------------------------------------------------------------------------
@@ -223,10 +349,31 @@ program
   .command('refactor')
   .argument('[path]', 'target project root', 'workspace')
   .option('-a, --apply', 'apply patches automatically')
+  .option('-i, --incremental', 'use incremental migration mode for safer execution')
+  .option('--max-stage-size <number>', 'maximum patches per stage (default: 5)', '5')
+  .option('--resume-from-stage <number>', 'resume from specific stage number')
+  .option('--skip-stages <numbers>', 'comma-separated list of stages to skip')
   .description('Execute refactor according to plan')
-  .action(async (path: string, opts: { apply?: boolean }) => {
+  .action(async (path: string, opts: { 
+    apply?: boolean; 
+    incremental?: boolean;
+    maxStageSize?: string;
+    resumeFromStage?: string;
+    skipStages?: string;
+  }) => {
     console.log(chalk.green('▶ running refactor...'));
-    await runRefactor(path, opts.apply ?? false);
+    
+    if (opts.incremental) {
+      console.log(chalk.cyan('🔄 インクリメンタルモード - 段階的に安全に実行します'));
+      await runIncrementalRefactor(path, {
+        apply: opts.apply ?? false,
+        maxStageSize: parseInt(opts.maxStageSize || '5'),
+        resumeFromStage: opts.resumeFromStage ? parseInt(opts.resumeFromStage) : undefined,
+        skipStages: opts.skipStages ? opts.skipStages.split(',').map(n => parseInt(n.trim())) : [],
+      });
+    } else {
+      await runRefactor(path, opts.apply ?? false);
+    }
   });
 
 program
