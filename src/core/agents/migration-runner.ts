@@ -261,9 +261,110 @@ export class MigrationRunner {
       return;
     }
 
-    // Legacy support for RefactorPatch - simplified implementation
-    // Note: New vf auto workflow uses RefactorAgent.executeRefactoring() directly
-    console.log(`Legacy MigrationRunner: processing ${patch.target_file}`);
+    console.log(`Applying patch: ${patch.id}`);
+    
+    // Process each change in the patch
+    if (patch.changes && Array.isArray(patch.changes)) {
+      for (const change of patch.changes) {
+        switch (change.type) {
+          case 'create':
+            await this.createFileFromPatch(change.target_path, change.description);
+            break;
+          case 'modify':
+            await this.modifyFile(change.target_path, patch);
+            break;
+          case 'delete':
+            await this.deleteFile(change.target_path);
+            break;
+          case 'move':
+            // Move operation would need source_path as well
+            console.log(`Move operation not implemented for: ${change.target_path}`);
+            break;
+          default:
+            console.log(`Unknown change type: ${change.type}`);
+        }
+      }
+    }
+  }
+
+  private async createFileFromPatch(targetPath: string, description: string): Promise<void> {
+    const fullPath = path.join(this.projectRoot, targetPath);
+    const dir = path.dirname(fullPath);
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    // Generate basic Go file content based on the target path
+    const content = this.generateGoFileContent(targetPath, description);
+    
+    fs.writeFileSync(fullPath, content);
+    console.log(`Created file: ${targetPath}`);
+  }
+
+  private generateGoFileContent(targetPath: string, description: string): string {
+    const fileName = path.basename(targetPath, '.go');
+    const parts = targetPath.split('/');
+    const moduleName = parts.find(p => p !== 'internal') || 'unknown';
+    
+    // Extract package name from path
+    let packageName = 'main';
+    if (parts.includes('domain')) packageName = 'domain';
+    else if (parts.includes('usecase')) packageName = 'usecase';
+    else if (parts.includes('infrastructure')) packageName = 'infrastructure';
+    else if (parts.includes('handler')) packageName = 'handler';
+    else if (parts.includes('test')) packageName = 'test';
+
+    // Generate basic Go file structure
+    let content = `package ${packageName}\n\n`;
+    
+    if (fileName.includes('entity')) {
+      content += `// ${fileName} represents a domain entity\n`;
+      content += `// ${description}\n`;
+      content += `type ${this.toPascalCase(fileName.replace('_entity', ''))}Entity struct {\n`;
+      content += `\tID uint \`json:"id" gorm:"primaryKey"\`\n`;
+      content += `\t// Add your fields here\n`;
+      content += `}\n`;
+    } else if (fileName.includes('service')) {
+      content += `// ${fileName} provides business logic\n`;
+      content += `// ${description}\n`;
+      content += `type ${this.toPascalCase(fileName.replace('_service', ''))}Service struct {\n`;
+      content += `\t// Add your dependencies here\n`;
+      content += `}\n\n`;
+      content += `func New${this.toPascalCase(fileName.replace('_service', ''))}Service() *${this.toPascalCase(fileName.replace('_service', ''))}Service {\n`;
+      content += `\treturn &${this.toPascalCase(fileName.replace('_service', ''))}Service{}\n`;
+      content += `}\n`;
+    } else if (fileName.includes('repository')) {
+      content += `// ${fileName} handles data persistence\n`;
+      content += `// ${description}\n`;
+      content += `type ${this.toPascalCase(fileName.replace('_repository', ''))}Repository struct {\n`;
+      content += `\t// Add your database connection here\n`;
+      content += `}\n\n`;
+      content += `func New${this.toPascalCase(fileName.replace('_repository', ''))}Repository() *${this.toPascalCase(fileName.replace('_repository', ''))}Repository {\n`;
+      content += `\treturn &${this.toPascalCase(fileName.replace('_repository', ''))}Repository{}\n`;
+      content += `}\n`;
+    } else if (fileName.includes('handler')) {
+      content += `// ${fileName} handles HTTP requests\n`;
+      content += `// ${description}\n`;
+      content += `type ${this.toPascalCase(fileName.replace('_handler', ''))}Handler struct {\n`;
+      content += `\t// Add your service dependencies here\n`;
+      content += `}\n\n`;
+      content += `func New${this.toPascalCase(fileName.replace('_handler', ''))}Handler() *${this.toPascalCase(fileName.replace('_handler', ''))}Handler {\n`;
+      content += `\treturn &${this.toPascalCase(fileName.replace('_handler', ''))}Handler{}\n`;
+      content += `}\n`;
+    } else {
+      content += `// ${description}\n`;
+      content += `// TODO: Implement ${fileName}\n`;
+    }
+
+    return content;
+  }
+
+  private toPascalCase(str: string): string {
+    return str.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join('');
   }
 
   private async createFile(filePath: string, content: string): Promise<void> {
@@ -299,17 +400,22 @@ export class MigrationRunner {
 
   private async commitPatch(patch: RefactorPatch, patchId: number): Promise<string> {
     try {
-      execSync(`git add "${patch.target_file}"`, { cwd: this.projectRoot });
+      execSync(`git add .`, { cwd: this.projectRoot });
       
-      const commitMessage = `vibeflow: ${patch.id} (patch ${patchId})
+      const commitMessage = `vibeflow: ${patch.id} (patch ${patchId})\n\nGenerated by VibeFlow autonomous refactoring pipeline.\nFile: ${patch.target_file}\n\n🤖 Generated with VibeFlow`;
 
-Generated by VibeFlow autonomous refactoring pipeline.
-File: ${patch.target_file}
-
-🤖 Generated with VibeFlow
-`;
-
-      execSync(`git commit -m "${commitMessage}"`, { cwd: this.projectRoot });
+      // Use temporary file for commit message to avoid shell escaping issues
+      const tmpMessageFile = path.join(this.projectRoot, '.vibeflow-commit-msg');
+      fs.writeFileSync(tmpMessageFile, commitMessage);
+      
+      try {
+        execSync(`git commit -F "${tmpMessageFile}"`, { cwd: this.projectRoot });
+      } finally {
+        // Clean up temporary file
+        if (fs.existsSync(tmpMessageFile)) {
+          fs.unlinkSync(tmpMessageFile);
+        }
+      }
       
       const commitHash = execSync('git rev-parse HEAD', { 
         cwd: this.projectRoot,
