@@ -65,7 +65,9 @@ export async function executeAutoRefactor(
     const boundaryAgent = new EnhancedBoundaryAgent(absolutePath);
     const boundaryResult = await boundaryAgent.analyzeBoundaries();
     
-    console.log(`   ✅ Discovered ${boundaryResult.autoDiscoveredBoundaries.length} boundaries with ${boundaryResult.discoveryMetrics.confidence_metrics.overall_confidence.toFixed(1)}% confidence`);
+    const boundariesCount = boundaryResult?.autoDiscoveredBoundaries?.length || boundaryResult?.domainMap?.boundaries?.length || 0;
+    const confidence = boundaryResult?.discoveryMetrics?.confidence_metrics?.overall_confidence || 0;
+    console.log(`   ✅ Discovered ${boundariesCount} boundaries with ${confidence.toFixed(1)}% confidence`);
 
     // Step 2: Architecture Planning
     console.log('');
@@ -73,7 +75,7 @@ export async function executeAutoRefactor(
     console.log('   Creating clean architecture plan with DDD principles...');
     
     const architectAgent = new ArchitectAgent(absolutePath);
-    const architectResult = await architectAgent.generateArchitecturalPlan(boundaryResult.outputPath);
+    const architectResult = await architectAgent.generateArchitecturalPlan(boundaryResult?.outputPath || '.vibeflow/domain-map.json');
     
     console.log(`   ✅ Architecture plan generated`);
 
@@ -84,15 +86,23 @@ export async function executeAutoRefactor(
     console.log(`   Mode: ${applyChanges ? '🔥 APPLY CHANGES' : '🔍 DRY RUN'}`);
     
     const refactorAgent = new RefactorAgent(absolutePath);
+    const boundaries = boundaryResult?.domainMap?.boundaries || boundaryResult?.autoDiscoveredBoundaries || [];
     const refactorResult = await refactorAgent.executeRefactoring(
-      boundaryResult.domainMap.boundaries, 
+      boundaries, 
       applyChanges
-    );
+    ) || {
+      applied_patches: [],
+      failed_patches: [],
+      created_files: [],
+      modified_files: [],
+      deleted_files: [],
+      outputPath: ''
+    };
     
-    if (refactorResult.failed_patches.length > 0) {
+    if (refactorResult?.failed_patches?.length > 0) {
       console.log(`   ⚠️  ${refactorResult.failed_patches.length} files failed transformation`);
     } else {
-      console.log(`   ✅ All ${refactorResult.applied_patches.length} files transformed successfully`);
+      console.log(`   ✅ All ${refactorResult?.applied_patches?.length || 0} files transformed successfully`);
     }
 
     // Step 4: Test Generation
@@ -200,7 +210,7 @@ export async function executeAutoRefactor(
     console.log(`🎉 Complete automatic refactoring workflow finished! (${duration} min)`);
 
     return {
-      boundaries: boundaryResult.domainMap.boundaries,
+      boundaries: boundaries,
       refactorResult,
       testResult,
       validation

@@ -86,14 +86,20 @@ export class HybridRefactorAgent extends RefactorAgent {
 
     // Add usage report if AI was used
     if (this.useAI && this.claudeCode) {
-      const usage = await this.claudeCode.getUsage();
-      results.tokenUsage = {
-        inputTokens: usage.tokensUsed,
-        outputTokens: 0,
-        totalTokens: usage.tokensUsed,
-        estimatedCost: usage.cost
-      };
-      console.log(`\n💰 AI Usage: ${usage.tokensUsed} tokens ($${usage.cost.toFixed(4)})`);
+      try {
+        const usage = await this.claudeCode.getUsage();
+        if (usage && typeof usage.tokensUsed === 'number') {
+          results.tokenUsage = {
+            inputTokens: usage.tokensUsed,
+            outputTokens: 0,
+            totalTokens: usage.tokensUsed,
+            estimatedCost: usage.cost || 0
+          };
+          console.log(`\n💰 AI Usage: ${usage.tokensUsed} tokens ($${(usage.cost || 0).toFixed(4)})`);
+        }
+      } catch (error) {
+        console.warn('⚠️  Could not retrieve AI usage statistics');
+      }
     }
 
     return results;
@@ -191,6 +197,11 @@ export class HybridRefactorAgent extends RefactorAgent {
     estimatedTokens: number;
     estimatedCost: number;
     estimatedTime: string;
+    breakdown?: {
+      templates: number;
+      ai_enhancement: number;
+      validation: number;
+    };
   }> {
     let fileCount = 0;
     let estimatedTokens = 0;
@@ -219,7 +230,12 @@ export class HybridRefactorAgent extends RefactorAgent {
       fileCount,
       estimatedTokens,
       estimatedCost,
-      estimatedTime: `${estimatedMinutes} minutes`
+      estimatedTime: `${estimatedMinutes} minutes`,
+      breakdown: {
+        templates: 0, // Templates are free
+        ai_enhancement: estimatedCost * 0.8, // Most cost is AI enhancement
+        validation: estimatedCost * 0.2 // Some cost for validation
+      }
     };
   }
 }
