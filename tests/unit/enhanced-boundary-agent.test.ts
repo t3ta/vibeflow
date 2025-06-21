@@ -1,11 +1,34 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EnhancedBoundaryAgent } from '../../src/core/agents/enhanced-boundary-agent.js';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 
 // Mock file system operations
 vi.mock('fs/promises');
+vi.mock('fs', () => ({
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  readdirSync: vi.fn(),
+  statSync: vi.fn()
+}));
+vi.mock('fast-glob', () => ({
+  default: vi.fn()
+}));
+vi.mock('child_process', () => ({
+  execSync: vi.fn()
+}));
+
+import fastGlob from 'fast-glob';
+import { execSync } from 'child_process';
+
 const mockedFs = vi.mocked(fs);
+const mockedFsSync = vi.mocked(fsSync);
+const mockedGlob = vi.mocked(fastGlob);
+const mockedExecSync = vi.mocked(execSync);
 
 describe('EnhancedBoundaryAgent', () => {
   let agent: EnhancedBoundaryAgent;
@@ -13,6 +36,13 @@ describe('EnhancedBoundaryAgent', () => {
 
   beforeEach(() => {
     tempDir = '/tmp/test-project';
+    
+    // Setup fs mocks
+    mockedFsSync.existsSync.mockReturnValue(true);
+    mockedFsSync.mkdirSync.mockReturnValue(undefined);
+    mockedFsSync.readFileSync.mockReturnValue('');
+    mockedFsSync.writeFileSync.mockReturnValue(undefined);
+    
     agent = new EnhancedBoundaryAgent(tempDir);
     vi.clearAllMocks();
   });
@@ -38,8 +68,30 @@ describe('EnhancedBoundaryAgent', () => {
 
   describe('analyzeBoundaries', () => {
     beforeEach(() => {
+      // Mock fast-glob to return test files
+      mockedGlob.mockResolvedValue([
+        'user.go',
+        'product.go', 
+        'order.go',
+        'main.go'
+      ]);
+      
+      // Mock fs.existsSync to return true for all files
+      mockedFsSync.existsSync.mockReturnValue(true);
+      
+      // Mock execSync for findGoFiles
+      mockedExecSync.mockReturnValue('./user.go\n./product.go\n./order.go\n./main.go\n');
+      
       // Mock file system operations
       mockedFs.readdir.mockResolvedValue([
+        'user.go',
+        'product.go', 
+        'order.go',
+        'main.go'
+      ] as any);
+      
+      // Mock sync fs operations too
+      mockedFsSync.readdirSync.mockReturnValue([
         'user.go',
         'product.go', 
         'order.go',
@@ -134,12 +186,110 @@ describe('EnhancedBoundaryAgent', () => {
         
         return Promise.resolve(mockFiles[fileName] || '');
       });
+      
+      // Mock sync readFile too
+      mockedFsSync.readFileSync.mockImplementation((filePath: string) => {
+        const fileName = path.basename(filePath.toString());
+        const mockFiles = {
+          'user.go': `
+            package main
+            
+            type User struct {
+              ID   string
+              Name string
+              Email string
+            }
+            
+            func CreateUser(name, email string) *User {
+              return &User{
+                ID:    generateID(),
+                Name:  name,
+                Email: email,
+              }
+            }
+            
+            func (u *User) Validate() error {
+              if u.Email == "" {
+                return errors.New("email required")
+              }
+              return nil
+            }
+          `,
+          'product.go': `
+            package main
+            
+            type Product struct {
+              ID    string
+              Name  string
+              Price float64
+            }
+            
+            func CreateProduct(name string, price float64) *Product {
+              return &Product{
+                ID:    generateID(),
+                Name:  name,
+                Price: price,
+              }
+            }
+            
+            func (p *Product) GetPrice() float64 {
+              return p.Price
+            }
+          `,
+          'order.go': `
+            package main
+            
+            type Order struct {
+              ID       string
+              UserID   string
+              Products []Product
+              Total    float64
+            }
+            
+            func CreateOrder(userID string, products []Product) *Order {
+              total := 0.0
+              for _, p := range products {
+                total += p.Price
+              }
+              return &Order{
+                ID:       generateID(),
+                UserID:   userID,
+                Products: products,
+                Total:    total,
+              }
+            }
+          `,
+          'main.go': `
+            package main
+            
+            import "fmt"
+            
+            func main() {
+              fmt.Println("Hello, World!")
+            }
+            
+            func generateID() string {
+              return "test-id"
+            }
+          `
+        };
+        
+        return mockFiles[fileName] || '';
+      });
 
       mockedFs.stat.mockImplementation((filePath: string) => {
         return Promise.resolve({
           isDirectory: () => false,
           isFile: () => true
         } as any);
+      });
+      
+      // Mock sync stat too
+      mockedFsSync.statSync.mockImplementation((filePath: string) => {
+        return {
+          isDirectory: () => false,
+          isFile: () => true
+        } as any;
       });
 
       mockedFs.mkdir.mockResolvedValue(undefined);

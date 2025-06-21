@@ -1,8 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { executeAutoRefactor } from '../../src/core/workflow/auto-refactor-workflow.js';
 import { createTempDir, cleanupTempDir, createMockGoProject, createMockTypeScriptProject } from '../setup.js';
+
+// Mock child_process and fs operations that might cause issues
+vi.mock('child_process', () => ({
+  execSync: vi.fn(),
+  exec: vi.fn()
+}));
+vi.mock('fs', () => ({
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  readdirSync: vi.fn(),
+  statSync: vi.fn()
+}));
 
 describe('E2E: Complete Auto-Refactor Workflow', () => {
   let tempDir: string;

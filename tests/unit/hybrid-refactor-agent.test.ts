@@ -2,12 +2,23 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HybridRefactorAgent } from '../../src/core/agents/hybrid-refactor-agent.js';
 import { DomainBoundary } from '../../src/core/types/config.js';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 
 // Mock dependencies
 vi.mock('fs/promises');
+vi.mock('fs', () => ({
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  readdirSync: vi.fn(),
+  statSync: vi.fn()
+}));
 vi.mock('../../src/core/utils/claude-code-integration.js');
 
 const mockedFs = vi.mocked(fs);
+const mockedFsSync = vi.mocked(fsSync);
 
 describe('HybridRefactorAgent', () => {
   let agent: HybridRefactorAgent;
@@ -16,6 +27,13 @@ describe('HybridRefactorAgent', () => {
 
   beforeEach(() => {
     tempDir = '/tmp/test-project';
+    
+    // Setup fs mocks
+    mockedFsSync.existsSync.mockReturnValue(true);
+    mockedFsSync.mkdirSync.mockReturnValue(undefined);
+    mockedFsSync.readFileSync.mockReturnValue('');
+    mockedFsSync.writeFileSync.mockReturnValue(undefined);
+    
     agent = new HybridRefactorAgent(tempDir);
     
     mockBoundaries = [

@@ -2,23 +2,8 @@ import { beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Global test setup
+// Create test results directory
 beforeAll(async () => {
-  // Suppress console output during tests unless explicitly needed
-  const originalConsole = console;
-  global.console = {
-    ...console,
-    log: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn()
-  };
-  
-  // Store original for restoration
-  (global as any).__originalConsole = originalConsole;
-  
-  // Create test results directory
   try {
     await fs.mkdir('./tests/results', { recursive: true });
   } catch (error) {
@@ -27,18 +12,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Restore original console
-  if ((global as any).__originalConsole) {
-    global.console = (global as any).__originalConsole;
-  }
+  // Tests completed
 });
 
 beforeEach(() => {
   // Clear all mocks before each test
   vi.clearAllMocks();
-  
-  // Reset modules to ensure clean state
-  vi.resetModules();
 });
 
 afterEach(() => {
@@ -47,13 +26,13 @@ afterEach(() => {
 });
 
 // Utility functions for tests
-export const createTempDir = async (prefix: string = 'vibeflow-test'): Promise<string> => {
+export const createTempDir = async (prefix = 'vibeflow-test') => {
   const tempDir = path.join('/tmp', `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   await fs.mkdir(tempDir, { recursive: true });
   return tempDir;
 };
 
-export const cleanupTempDir = async (tempDir: string): Promise<void> => {
+export const cleanupTempDir = async (tempDir) => {
   try {
     await fs.rm(tempDir, { recursive: true, force: true });
   } catch (error) {
@@ -61,13 +40,13 @@ export const cleanupTempDir = async (tempDir: string): Promise<void> => {
   }
 };
 
-export const createMockFile = async (filePath: string, content: string): Promise<void> => {
+export const createMockFile = async (filePath, content) => {
   const dir = path.dirname(filePath);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(filePath, content);
 };
 
-export const createMockGoProject = async (projectDir: string): Promise<void> => {
+export const createMockGoProject = async (projectDir) => {
   await createMockFile(path.join(projectDir, 'go.mod'), `
 module test-project
 
@@ -165,7 +144,7 @@ func generateProductID() string {
 `);
 };
 
-export const createMockTypeScriptProject = async (projectDir: string): Promise<void> => {
+export const createMockTypeScriptProject = async (projectDir) => {
   await createMockFile(path.join(projectDir, 'package.json'), `
 {
   "name": "test-project",
@@ -283,35 +262,8 @@ export class ProductService {
 `);
 };
 
-// Mock implementations for common dependencies
-export const mockFileSystem = () => {
-  const mockFs = vi.hoisted(() => ({
-    readFile: vi.fn(),
-    writeFile: vi.fn(),
-    readdir: vi.fn(),
-    stat: vi.fn(),
-    access: vi.fn(),
-    mkdir: vi.fn(),
-    rm: vi.fn(),
-    existsSync: vi.fn()
-  }));
-
-  vi.mock('fs/promises', () => mockFs);
-  vi.mock('fs', () => ({ ...mockFs, existsSync: mockFs.existsSync }));
-
-  return mockFs;
-};
-
-export const mockChildProcess = () => {
-  const mockExecSync = vi.fn();
-  vi.mock('child_process', () => ({
-    execSync: mockExecSync
-  }));
-  return { execSync: mockExecSync };
-};
-
 // Test data generators
-export const generateMockBoundary = (overrides: Partial<any> = {}) => ({
+export const generateMockBoundary = (overrides = {}) => ({
   name: 'test-boundary',
   description: 'Test boundary description',
   files: ['test.go'],
@@ -322,7 +274,7 @@ export const generateMockBoundary = (overrides: Partial<any> = {}) => ({
   ...overrides
 });
 
-export const generateMockRefactorResult = (overrides: Partial<any> = {}) => ({
+export const generateMockRefactorResult = (overrides = {}) => ({
   applied_patches: ['file1.go'],
   failed_patches: [],
   generated_files: ['internal/test/domain/test.go'],

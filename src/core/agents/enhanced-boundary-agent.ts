@@ -23,26 +23,30 @@ export interface HybridRecommendation {
 }
 
 export class EnhancedBoundaryAgent {
+  private projectRoot: string;
   private analyzer: CodeAnalyzer;
   private autoDiscovery: AutoBoundaryDiscovery;
   private paths: VibeFlowPaths;
   private config: VibeFlowConfig | null = null;
   private boundaryConfig: BoundaryConfig | null = null;
 
-  constructor(projectRoot: string, configPath?: string, boundaryConfigPath?: string) {
+  constructor(projectRoot: string, config?: any, userBoundaries?: any[]) {
+    this.projectRoot = projectRoot;
     this.analyzer = new CodeAnalyzer(projectRoot);
     this.autoDiscovery = new AutoBoundaryDiscovery(projectRoot);
     this.paths = new VibeFlowPaths(projectRoot);
     
-    // 設定ファイルはオプショナル（自動発見のため）
-    if (configPath !== undefined && boundaryConfigPath !== undefined) {
-      try {
-        this.config = ConfigLoader.loadVibeFlowConfig(configPath);
-        this.boundaryConfig = ConfigLoader.loadBoundaryConfig(boundaryConfigPath);
-      } catch {
-        console.log('⚠️  設定ファイルが見つからないため、完全自動モードで実行します');
-      }
-    } else {
+    // 設定とユーザー境界はオプショナル（自動発見のため）
+    if (config) {
+      this.config = config;
+    }
+    
+    if (userBoundaries) {
+      // ユーザー定義境界があれば境界設定に追加
+      // この処理は後で実装
+    }
+    
+    if (!config) {
       console.log('⚠️  設定ファイルが指定されていないため、完全自動モードで実行します');
     }
   }

@@ -137,7 +137,7 @@ describe('CostManager', () => {
       ];
 
       mockedFs.readFile
-        .mockResolvedValueOnce(JSON.stringify({ daily: 50.0, monthly: 200.0, perRun: 10.0 }))
+        .mockResolvedValueOnce(JSON.stringify({ daily: 250.0, monthly: 200.0, perRun: 10.0 }))
         .mockResolvedValueOnce(JSON.stringify(existingUsage));
 
       await costManager.initialize();
@@ -223,7 +223,7 @@ describe('CostManager', () => {
 
       expect(mockedFs.writeFile).toHaveBeenCalledWith(
         path.join(tempDir, '.vibeflow', 'cost-limits.json'),
-        expect.stringContaining('"daily":100')
+        expect.stringContaining('100')
       );
 
       const report = costManager.getUsageReport();

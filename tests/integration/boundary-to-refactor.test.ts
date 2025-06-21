@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import { EnhancedBoundaryAgent } from '../../src/core/agents/enhanced-boundary-agent.js';
 import { HybridRefactorAgent } from '../../src/core/agents/hybrid-refactor-agent.js';
 import { createTempDir, cleanupTempDir, createMockGoProject } from '../setup.js';
+
+// Mock fs operations for agent initialization
+vi.mock('fs');
+const mockedFsSync = vi.mocked(fsSync);
 
 describe('Integration: Boundary Discovery → Refactoring', () => {
   let tempDir: string;
@@ -13,6 +18,12 @@ describe('Integration: Boundary Discovery → Refactoring', () => {
   beforeEach(async () => {
     tempDir = await createTempDir('boundary-refactor-integration');
     await createMockGoProject(tempDir);
+    
+    // Setup fs mocks for agent initialization
+    mockedFsSync.existsSync.mockReturnValue(true);
+    mockedFsSync.mkdirSync.mockReturnValue(undefined);
+    mockedFsSync.readFileSync.mockReturnValue('');
+    mockedFsSync.writeFileSync.mockReturnValue(undefined);
     
     boundaryAgent = new EnhancedBoundaryAgent(tempDir);
     refactorAgent = new HybridRefactorAgent(tempDir);

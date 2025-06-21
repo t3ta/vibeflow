@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { executeAutoRefactor } from '../../src/core/workflow/auto-refactor-workflow.js';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 
 // Mock all agents and dependencies
 vi.mock('../../src/core/agents/enhanced-boundary-agent.js');
@@ -9,8 +10,22 @@ vi.mock('../../src/core/agents/refactor-agent.js');
 vi.mock('../../src/core/agents/test-synth-agent.js');
 vi.mock('../../src/core/agents/review-agent.js');
 vi.mock('fs/promises');
+vi.mock('fs', () => ({
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  readdirSync: vi.fn(),
+  statSync: vi.fn()
+}));
+vi.mock('child_process', () => ({
+  execSync: vi.fn(),
+  exec: vi.fn()
+}));
 
 const mockedFs = vi.mocked(fs);
+const mockedFsSync = vi.mocked(fsSync);
 
 // Create mock implementations
 const createMockBoundaryAgent = () => ({

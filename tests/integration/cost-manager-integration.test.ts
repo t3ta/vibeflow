@@ -1,9 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
 import { CostManager } from '../../src/core/utils/cost-manager.js';
 import { HybridRefactorAgent } from '../../src/core/agents/hybrid-refactor-agent.js';
 import { createTempDir, cleanupTempDir, createMockGoProject, generateMockBoundary } from '../setup.js';
+
+// Mock fs operations
+vi.mock('fs');
+const mockedFsSync = vi.mocked(fsSync);
 
 describe('Integration: Cost Management with Refactoring', () => {
   let tempDir: string;
@@ -13,6 +18,12 @@ describe('Integration: Cost Management with Refactoring', () => {
   beforeEach(async () => {
     tempDir = await createTempDir('cost-integration');
     await createMockGoProject(tempDir);
+    
+    // Setup fs mocks for agent initialization
+    mockedFsSync.existsSync.mockReturnValue(true);
+    mockedFsSync.mkdirSync.mockReturnValue(undefined);
+    mockedFsSync.readFileSync.mockReturnValue('');
+    mockedFsSync.writeFileSync.mockReturnValue(undefined);
     
     costManager = new CostManager(tempDir);
     refactorAgent = new HybridRefactorAgent(tempDir);
