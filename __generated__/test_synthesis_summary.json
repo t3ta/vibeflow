@@ -1,0 +1,13 @@
+{
+  "generated_tests": 1,
+  "test_relocations": 0,
+  "coverage_improvement": {
+    "current_coverage": 45,
+    "target_coverage": 70,
+    "new_test_files": 1,
+    "relocated_test_files": 0
+  },
+  "files_created": [
+    "internal/user/test/user_service_test.go"
+  ]
+}

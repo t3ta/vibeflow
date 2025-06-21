@@ -47,6 +47,16 @@ export const createMockFile = async (filePath, content) => {
 };
 
 export const createMockGoProject = async (projectDir) => {
+  // Initialize git repository for safe migration
+  const { execSync } = require('child_process');
+  try {
+    execSync('git init', { cwd: projectDir, stdio: 'ignore' });
+    execSync('git config user.email "test@example.com"', { cwd: projectDir, stdio: 'ignore' });
+    execSync('git config user.name "Test User"', { cwd: projectDir, stdio: 'ignore' });
+  } catch (error) {
+    // Ignore git initialization errors in tests
+  }
+
   await createMockFile(path.join(projectDir, 'go.mod'), `
 module test-project
 
@@ -142,9 +152,27 @@ func generateProductID() string {
     return "prod-" + time.Now().Format("20060102150405")
 }
 `);
+
+  // Create initial git commit for migration safety
+  try {
+    execSync('git add .', { cwd: projectDir, stdio: 'ignore' });
+    execSync('git commit -m "Initial commit"', { cwd: projectDir, stdio: 'ignore' });
+  } catch (error) {
+    // Ignore git commit errors in tests
+  }
 };
 
 export const createMockTypeScriptProject = async (projectDir) => {
+  // Initialize git repository for safe migration
+  const { execSync } = require('child_process');
+  try {
+    execSync('git init', { cwd: projectDir, stdio: 'ignore' });
+    execSync('git config user.email "test@example.com"', { cwd: projectDir, stdio: 'ignore' });
+    execSync('git config user.name "Test User"', { cwd: projectDir, stdio: 'ignore' });
+  } catch (error) {
+    // Ignore git initialization errors in tests
+  }
+
   await createMockFile(path.join(projectDir, 'package.json'), `
 {
   "name": "test-project",
@@ -260,6 +288,14 @@ export class ProductService {
   }
 }
 `);
+
+  // Create initial git commit for migration safety
+  try {
+    execSync('git add .', { cwd: projectDir, stdio: 'ignore' });
+    execSync('git commit -m "Initial commit"', { cwd: projectDir, stdio: 'ignore' });
+  } catch (error) {
+    // Ignore git commit errors in tests
+  }
 };
 
 // Test data generators

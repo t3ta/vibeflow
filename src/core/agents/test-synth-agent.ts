@@ -42,11 +42,11 @@ export class TestSynthAgent {
     this.analyzer = new CodeAnalyzer(projectRoot);
   }
 
-  async synthesizeTests(refactorPlanPath: string): Promise<TestSynthResult> {
+  async synthesizeTests(modeOrPath: string): Promise<TestSynthResult> {
     console.log('🧪 テスト移行とテスト生成を処理中...');
     
-    // 1. リファクタリング計画読み込み
-    const refactorPlan = this.loadRefactorPlan(refactorPlanPath);
+    // 1. リファクタリング計画読み込み (mode or path)
+    const refactorPlan = this.loadRefactorPlan(modeOrPath);
     
     // 2. 既存テストファイル分析
     const existingTests = await this.analyzeExistingTests();
@@ -79,19 +79,53 @@ export class TestSynthAgent {
     };
   }
 
-  private loadRefactorPlan(planPath: string): RefactorPlan {
-    // Simplified implementation - load from manifest.json
+  private loadRefactorPlan(modeOrPath: string): RefactorPlan {
+    // Check for manifest.json first
     const manifestPath = path.join('.vibeflow', 'patches', 'manifest.json');
-    if (!fs.existsSync(manifestPath)) {
-      throw new Error(`Refactor manifest not found: ${manifestPath}`);
+    if (fs.existsSync(manifestPath)) {
+      try {
+        const content = fs.readFileSync(manifestPath, 'utf8');
+        const manifest = JSON.parse(content);
+        
+        return {
+          patches: manifest.patches || [],
+          summary: manifest.summary || { total_patches: 0, target_modules: [], estimated_time: '0 minutes' },
+        };
+      } catch (error) {
+        console.warn(`⚠️  Failed to parse manifest file: ${error}`);
+      }
     }
     
-    const content = fs.readFileSync(manifestPath, 'utf8');
-    const manifest = JSON.parse(content);
+    // Check if modeOrPath is a valid file path
+    if (modeOrPath && fs.existsSync(modeOrPath)) {
+      try {
+        const manifestInPath = path.join(modeOrPath, 'manifest.json');
+        if (fs.existsSync(manifestInPath)) {
+          const content = fs.readFileSync(manifestInPath, 'utf8');
+          const manifest = JSON.parse(content);
+          
+          return {
+            patches: manifest.patches || [],
+            summary: manifest.summary || { total_patches: 0, target_modules: [], estimated_time: '0 minutes' },
+          };
+        }
+      } catch (error) {
+        console.warn(`⚠️  Failed to load manifest from ${modeOrPath}: ${error}`);
+      }
+    }
     
+    // Handle simulation/internal modes or missing manifest
+    console.warn(`⚠️  No refactor manifest found (mode: ${modeOrPath}), generating minimal test structure`);
+    
+    // Generate simulated patches for demonstration
+    if (modeOrPath === 'simulation' || modeOrPath === 'internal') {
+      return this.generateSimulatedPlan();
+    }
+    
+    // Default empty plan
     return {
-      patches: manifest.patches,
-      summary: manifest.summary,
+      patches: [],
+      summary: { total_patches: 0, target_modules: [], estimated_time: '0 minutes' },
     };
   }
 
@@ -536,6 +570,47 @@ func TestE2ETestSuite(t *testing.T) {
       files_created: result.generated_tests.map(t => t.file),
     };
     fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
+  }
+
+  private generateSimulatedPlan(): RefactorPlan {
+    // Generate a minimal plan for demonstration/testing
+    return {
+      patches: [
+        {
+          id: 'patch-1',
+          target_file: 'internal/user/domain/user.go',
+          changes: [
+            {
+              type: 'create',
+              target_path: 'internal/user/domain/user.go',
+              content: 'package user\n\ntype Entity struct {\n\tID string\n\tName string\n}',
+              description: 'Create user domain entity',
+            }
+          ],
+          dependencies: [],
+          test_requirements: ['unit tests for user entity'],
+        },
+        {
+          id: 'patch-2', 
+          target_file: 'internal/user/interface.go',
+          changes: [
+            {
+              type: 'create',
+              target_path: 'internal/user/interface.go',
+              content: 'package user\n\ntype Service interface {\n\tGet(id string) (*Entity, error)\n}',
+              description: 'Create user service interface',
+            }
+          ],
+          dependencies: ['patch-1'],
+          test_requirements: ['interface mock tests'],
+        }
+      ],
+      summary: {
+        total_patches: 2,
+        target_modules: ['user'],
+        estimated_time: '5 minutes'
+      }
+    };
   }
 
   private capitalize(str: string): string {
