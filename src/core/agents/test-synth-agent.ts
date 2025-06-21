@@ -81,7 +81,7 @@ export class TestSynthAgent {
 
   private loadRefactorPlan(planPath: string): RefactorPlan {
     // Simplified implementation - load from manifest.json
-    const manifestPath = path.join('.refactor', 'manifest.json');
+    const manifestPath = path.join('.vibeflow', 'patches', 'manifest.json');
     if (!fs.existsSync(manifestPath)) {
       throw new Error(`Refactor manifest not found: ${manifestPath}`);
     }

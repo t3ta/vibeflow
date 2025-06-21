@@ -278,38 +278,75 @@ ${originalCode}
   }
 
   /**
-   * Legacy method for backward compatibility
-   * Will be deprecated in favor of executeRefactoring
+   * Generate actual refactor plan based on discovered boundaries
    */
   async generateRefactorPlan(planPath: string): Promise<RefactorAgentResult> {
-    console.log('⚠️  Using legacy generateRefactorPlan method. Consider using executeRefactoring for actual transformation.');
+    console.log('🔧 Generating refactor plan from architectural analysis...');
     
     // Load the architectural plan
     const planContent = fsSync.readFileSync(planPath, 'utf8');
     
-    // Generate stub plan for backward compatibility
+    // Load domain map to get discovered boundaries
+    const domainMapPath = path.join(this.projectRoot, '.vibeflow', 'domain-map.json');
+    if (!fsSync.existsSync(domainMapPath)) {
+      throw new Error('Domain map not found. Run boundary discovery first.');
+    }
+    
+    const domainMap = JSON.parse(fsSync.readFileSync(domainMapPath, 'utf8'));
+    const boundaries = domainMap.boundaries;
+    
+    // Generate actual refactor patches based on boundaries
+    const patches: RefactorPatch[] = [];
+    
+    for (let i = 0; i < boundaries.length; i++) {
+      const boundary = boundaries[i];
+      const patchId = (i + 1).toString().padStart(3, '0');
+      
+      // Create patches for each file in the boundary
+      for (const file of boundary.files) {
+        const changes: PatchChange[] = [
+          {
+            type: 'create',
+            target_path: `internal/${boundary.name}/domain/${path.basename(file, '.go')}_entity.go`,
+            description: `Extract ${boundary.name} domain entity from ${file}`,
+          },
+          {
+            type: 'create',
+            target_path: `internal/${boundary.name}/usecase/${boundary.name}_service.go`,
+            description: `Create ${boundary.name} service with business logic`,
+          },
+          {
+            type: 'create',
+            target_path: `internal/${boundary.name}/infrastructure/${boundary.name}_repository.go`,
+            description: `Create ${boundary.name} repository implementation`,
+          },
+          {
+            type: 'create',
+            target_path: `internal/${boundary.name}/handler/${boundary.name}_handler.go`,
+            description: `Create ${boundary.name} HTTP handler`,
+          },
+        ];
+        
+        patches.push({
+          id: `${patchId}_${path.basename(file, '.go')}`,
+          target_file: file,
+          changes,
+          dependencies: boundary.dependencies || [],
+          test_requirements: [
+            `internal/${boundary.name}/test/${boundary.name}_test.go`,
+            `internal/${boundary.name}/test/${boundary.name}_integration_test.go`,
+          ],
+        });
+      }
+    }
+    
     const plan: RefactorPlan = {
       summary: {
-        total_patches: 3,
-        target_modules: ['customer', 'medicine', 'feeding'],
-        estimated_time: '5-10 minutes per module',
+        total_patches: patches.length,
+        target_modules: boundaries.map((b: any) => b.name),
+        estimated_time: `${Math.ceil(patches.length * 2)}~${Math.ceil(patches.length * 3)} minutes`,
       },
-      patches: [
-        {
-          id: '001',
-          target_file: 'legacy-refactor-placeholder',
-          changes: [
-            {
-              type: 'create',
-              target_path: 'internal/refactored/placeholder.go',
-              content: '// Use executeRefactoring() for actual AI transformation',
-              description: 'Placeholder - use AI refactoring instead',
-            },
-          ],
-          dependencies: [],
-          test_requirements: [],
-        },
-      ],
+      patches,
     };
 
     const outputPath = this.paths.patchesDir;
@@ -322,7 +359,8 @@ ${originalCode}
 
     fsSync.writeFileSync(manifestPath, JSON.stringify(plan, null, 2));
 
-    console.log(`📝 Legacy plan generated. Use 'vf auto' for actual AI transformation.`);
+    console.log(`📝 Generated ${patches.length} refactor patches for ${boundaries.length} modules`);
+    console.log(`   Target modules: ${boundaries.map((b: any) => b.name).join(', ')}`);
 
     return {
       plan,

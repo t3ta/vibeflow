@@ -6,11 +6,14 @@ import { ReviewAgent } from '../agents/review-agent.js';
 import { CompileResult, TestResult, PerformanceResult } from '../types/refactor.js';
 import { execSync } from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
 import chalk from 'chalk';
 
 import { DomainBoundary } from '../types/config.js';
 import { RefactorResult } from '../types/refactor.js';
 import { TestSynthResult } from '../agents/test-synth-agent.js';
+import { MigrationResult } from '../agents/migration-runner.js';
+import { VibeFlowPaths } from '../utils/file-paths.js';
 
 export interface AutoRefactorResult {
   boundaries: DomainBoundary[];
@@ -39,6 +42,9 @@ export async function executeAutoRefactor(
     applyChanges,
     startTime: Date.now()
   };
+
+  // Initialize paths for the workflow
+  const paths = new VibeFlowPaths(absolutePath);
 
   try {
     // Implementation Status
@@ -99,6 +105,42 @@ export async function executeAutoRefactor(
     
     console.log(`   ✅ Generated ${testResult.generated_tests.length} test files`);
 
+    // Create migration result for review agent
+    const migrationResult: MigrationResult = {
+      applied_patches: refactorResult.applied_patches.map((file, index) => ({
+        patch_id: index + 1,
+        file: file,
+        action: 'refactor',
+        success: true,
+      })),
+      failed_patches: refactorResult.failed_patches.map((failure, index) => ({
+        patch_id: refactorResult.applied_patches.length + index + 1,
+        file: failure.file,
+        action: 'refactor',
+        error: failure.error,
+        rollback_required: true,
+      })),
+      build_result: {
+        success: true, // Will be updated in quality validation
+        errors: [],
+        warnings: [],
+        duration_ms: 0,
+      },
+      test_result: {
+        success: true, // Will be updated in quality validation
+        total_tests: 0,
+        passed_tests: 0,
+        failed_tests: 0,
+        duration_ms: 0,
+      },
+      rollback_info: {
+        backup_commit: 'auto-refactor-backup',
+        rollback_available: applyChanges,
+        rollback_steps: ['git reset --hard auto-refactor-backup'],
+      },
+      outputPath: paths.migrationResultPath,
+    };
+
     // Step 5: Quality Validation
     console.log('');
     console.log('🔍 Step 5/6: Quality Validation');
@@ -106,11 +148,35 @@ export async function executeAutoRefactor(
     
     const validation = await runQualityValidation(absolutePath, applyChanges);
     
+    // Update migration result with validation results
+    migrationResult.build_result = {
+      success: validation.compile.success,
+      errors: validation.compile.errors,
+      warnings: validation.compile.warnings,
+      duration_ms: 0,
+    };
+    
+    migrationResult.test_result = {
+      success: validation.tests.success,
+      total_tests: validation.tests.passed + validation.tests.failed,
+      passed_tests: validation.tests.passed,
+      failed_tests: validation.tests.failed,
+      coverage_percentage: validation.tests.coverage,
+      duration_ms: 0,
+    };
+    
     if (validation.compile.success && validation.tests.success) {
       console.log(`   ✅ All quality checks passed`);
     } else {
       console.log(`   ⚠️  Some quality checks failed - review needed`);
     }
+
+    // Save migration result file for review agent
+    await fs.promises.writeFile(
+      paths.migrationResultPath,
+      JSON.stringify(migrationResult, null, 2)
+    );
+    console.log(`📄 Migration result saved: ${paths.getRelativePath(paths.migrationResultPath)}`);
 
     // Step 6: Review and Decision
     console.log('');
@@ -118,7 +184,8 @@ export async function executeAutoRefactor(
     console.log('   Analyzing changes and generating quality report...');
     
     const reviewAgent = new ReviewAgent(absolutePath);
-    const reviewResult = await reviewAgent.reviewChanges('auto-refactor-results');
+    // Use the actual migration result path from the VibeFlowPaths
+    const reviewResult = await reviewAgent.reviewChanges(paths.migrationResultPath);
     
     if (reviewResult.auto_merge_decision.should_auto_merge && applyChanges) {
       console.log('   ✅ AI approved changes - ready for production!');
