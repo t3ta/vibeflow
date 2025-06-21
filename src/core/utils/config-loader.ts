@@ -8,7 +8,53 @@ export class ConfigLoader {
     const filePath = configPath || defaultPath;
     
     if (!fs.existsSync(filePath)) {
-      throw new Error(`VibeFlow config file not found: ${filePath}`);
+      // Return default config if file doesn't exist
+      return {
+        project: {
+          name: 'auto-discovered-project',
+          language: 'go',
+          root: '.'
+        },
+        analysis: {
+          entry_points: ['main.go', 'cmd/'],
+          exclude_patterns: ['**/*_test.go', '**/vendor/**', '**/.git/**'],
+          include_patterns: ['**/*.go']
+        },
+        boundaries: {
+          target_modules: {}
+        },
+        refactoring: {
+          target_architecture: {
+            pattern: 'clean-arch',
+            module_structure: 'layered'
+          },
+          value_objects: {
+            priority_high: ['User', 'Order', 'Product'],
+            priority_medium: ['Event', 'Notification']
+          },
+          quality_gates: {
+            test_coverage: {
+              minimum: 70,
+              current: 45
+            },
+            dependency_rules: ['no-circular', 'layer-isolation'],
+            performance: {
+              response_time_tolerance: 500
+            }
+          }
+        },
+        output: {
+          artifacts: {
+            domain_map: '.vibeflow/domain-map.json',
+            plan: '.vibeflow/plan.md',
+            patches: '.vibeflow/patches',
+            metrics: '.vibeflow/metrics.json'
+          }
+        },
+        migration: {
+          phases: {}
+        }
+      };
     }
 
     const content = fs.readFileSync(filePath, 'utf8');
