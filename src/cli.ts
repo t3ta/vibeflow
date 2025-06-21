@@ -230,7 +230,6 @@ async function runIncrementalRefactor(projectRoot: string, options: {
     const enhancedTestSynth = new EnhancedTestSynthAgent();
     const testSynthResult = await enhancedTestSynth.execute({
       projectPath: absolutePath,
-      refactoringManifest: {},
       currentCoverage: 18.6, // From real experiment data
       targetCoverage: 50,
       language: 'go',

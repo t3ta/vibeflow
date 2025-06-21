@@ -1,1 +1,12 @@
 operation,project_size,language,duration_ms,memory_bytes,success,file_count,boundaries_found,generated_files
+boundary_discovery,small,go,776.6146250000002,60216,true,10,8,
+boundary_discovery,small,typescript,1401.5754999999995,56032,true,0,,
+boundary_discovery,medium,go,821.6060419999994,58752,true,50,26,
+boundary_discovery,medium,typescript,964.41975,56032,true,0,,
+boundary_discovery,large,go,2377.2225829999998,58024,true,200,7,
+boundary_discovery,large,typescript,1884.2795000000006,279800,true,0,,
+boundary_discovery,xl,go,3054.2497089999997,57784,true,500,5,
+boundary_discovery,scaling-10,go,450.92554200000086,59664,true,10,8,
+boundary_discovery,scaling-50,go,590.4604169999984,219456,true,50,26,
+boundary_discovery,scaling-100,go,1333.2447079999984,58512,true,100,23,
+error_handling,small,go,1041.129582999998,56128,true,1,,

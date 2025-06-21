@@ -1,14 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createTempDir, cleanupTempDir, createMockGoProject } from '../setup.js';
 
-// Mock child_process for CLI commands
-vi.mock('child_process', () => ({
-  execSync: vi.fn(),
-  exec: vi.fn()
-}));
+// Don't mock child_process for E2E tests - we need to actually run commands
 
 describe('E2E: CLI Commands', () => {
   let tempDir: string;

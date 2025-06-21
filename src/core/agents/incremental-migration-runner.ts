@@ -477,7 +477,7 @@ export class IncrementalMigrationRunner extends BaseAgent<IncrementalMigrationIn
   ): Promise<any> {
     const buildErrors = this.convertToBuildErrors(buildResult.errors, buildResult.errors.join('\n'));
     
-    return await this.buildFixer.execute({
+    return await this.buildFixer.run({
       projectPath,
       buildErrors,
       refactoringManifest: { stage: stage.name },

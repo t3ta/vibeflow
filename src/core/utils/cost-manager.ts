@@ -181,7 +181,18 @@ export class CostManager {
    * Update cost limits
    */
   async updateLimits(newLimits: Partial<CostLimit>): Promise<void> {
-    this.limits = { ...this.limits, ...newLimits };
+    const updatedLimits = { ...this.limits, ...newLimits };
+    
+    // Validate limits hierarchy
+    if (updatedLimits.daily < updatedLimits.perRun) {
+      throw new Error('Daily limit must be greater than or equal to per-run limit');
+    }
+    
+    if (updatedLimits.monthly < updatedLimits.daily) {
+      throw new Error('Monthly limit must be greater than or equal to daily limit');
+    }
+    
+    this.limits = updatedLimits;
     await this.saveLimits();
   }
 

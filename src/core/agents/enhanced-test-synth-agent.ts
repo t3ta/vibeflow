@@ -35,10 +35,16 @@ const TestGenerationStrategySchema = z.object({
 
 const EnhancedTestSynthInputSchema = z.object({
   projectPath: z.string(),
-  refactoringManifest: z.any(),
-  currentCoverage: z.number(),
+  refactoredModules: z.array(z.any()).optional(),
+  currentCoverage: z.union([
+    z.number(),
+    z.object({
+      overall: z.number(),
+      byFile: z.record(z.number()).optional()
+    })
+  ]),
   targetCoverage: z.number().min(0).max(100).default(50),
-  language: z.enum(['go', 'typescript', 'python']),
+  language: z.enum(['go', 'typescript', 'python']).default('go'),
   testTypes: z.array(z.enum(['unit', 'integration', 'e2e'])).default(['unit', 'integration']),
   aiEnabled: z.boolean().default(true),
 });
@@ -97,7 +103,7 @@ export class EnhancedTestSynthAgent extends BaseAgent<EnhancedTestSynthInput, En
   constructor() {
     super(
       'EnhancedTestSynthAgent',
-      'AI-powered test generation and coverage improvement agent',
+      'AI-powered test synthesis with coverage improvement targets',
       EnhancedTestSynthInputSchema as any,
       EnhancedTestSynthOutputSchema as any
     );
@@ -127,8 +133,11 @@ export class EnhancedTestSynthAgent extends BaseAgent<EnhancedTestSynthInput, En
       const generatedTests = await this.generateNewTests(input, coverageAnalysis, testStrategy);
       
       // Phase 5: Calculate improvement metrics
+      const currentCoverageNumber = typeof input.currentCoverage === 'number' 
+        ? input.currentCoverage 
+        : input.currentCoverage.overall;
       const coverageImprovement = this.calculateCoverageImprovement(
-        input.currentCoverage,
+        currentCoverageNumber,
         generatedTests,
         testRelocations
       );
@@ -157,7 +166,9 @@ export class EnhancedTestSynthAgent extends BaseAgent<EnhancedTestSynthInput, En
     this.logger.info('Analyzing coverage gaps');
 
     const coverageFile = path.join(input.projectPath, 'coverage.out');
-    let currentCoverage = input.currentCoverage;
+    let currentCoverage = typeof input.currentCoverage === 'number' 
+      ? input.currentCoverage 
+      : input.currentCoverage.overall;
     let functionCoverage = 0;
     let branchCoverage = 0;
 
@@ -191,13 +202,16 @@ export class EnhancedTestSynthAgent extends BaseAgent<EnhancedTestSynthInput, En
     input: EnhancedTestSynthInput,
     analysis: CoverageAnalysis
   ): Promise<any> {
-    const coverageGap = input.targetCoverage - input.currentCoverage;
+    const currentCoverageNumber = typeof input.currentCoverage === 'number' 
+      ? input.currentCoverage 
+      : input.currentCoverage.overall;
+    const coverageGap = input.targetCoverage - currentCoverageNumber;
     const highPriorityGaps = analysis.coverageGaps.filter(gap => gap.priority === 'high');
     
     return {
       unitTests: {
         priority: highPriorityGaps.length > 5 ? 'high' : 'medium',
-        targetCoverage: Math.min(input.targetCoverage, input.currentCoverage + 20),
+        targetCoverage: Math.min(input.targetCoverage, currentCoverageNumber + 20),
         focusAreas: highPriorityGaps.map(gap => gap.function),
       },
       integrationTests: {
@@ -368,14 +382,24 @@ export class EnhancedTestSynthAgent extends BaseAgent<EnhancedTestSynthInput, En
   }
 
   private async findUncoveredFunctions(input: EnhancedTestSynthInput): Promise<string[]> {
-    const sourceFiles = await glob('**/*.go', { 
+    // Find source files based on language
+    const patterns = {
+      go: '**/*.go',
+      typescript: '**/*.{ts,tsx}',
+      python: '**/*.py',
+    };
+    
+    const sourceFiles = await glob(patterns[input.language], { 
       cwd: input.projectPath,
-      ignore: ['vendor/**', '*_test.go'],
+      ignore: ['vendor/**', '*_test.go', '**/*.test.*'],
     });
     
     const uncoveredFunctions: string[] = [];
     
-    for (const file of sourceFiles) {
+    // Ensure sourceFiles is iterable
+    const files = Array.isArray(sourceFiles) ? sourceFiles : [];
+    
+    for (const file of files) {
       const functions = await this.extractFunctions(path.join(input.projectPath, file));
       // Check coverage for each function (simplified)
       uncoveredFunctions.push(...functions.filter(f => !this.isFunctionCovered(f)));

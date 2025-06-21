@@ -424,6 +424,18 @@ export class BuildFixerAgent extends BaseAgent<BuildFixerInput, BuildFixerOutput
 
   private extractNewModules(manifest: any): Array<{ name: string; path: string }> {
     // Extract module information from refactoring manifest
+    if (manifest?.newModules && Array.isArray(manifest.newModules)) {
+      return manifest.newModules;
+    }
+    
+    // If manifest has movedPackages, convert them to modules
+    if (manifest?.movedPackages) {
+      return Object.entries(manifest.movedPackages).map(([oldPath, newPath]) => ({
+        name: newPath as string,
+        path: (newPath as string).replace(/\./g, '/'),
+      }));
+    }
+    
     return [];
   }
 
@@ -471,6 +483,10 @@ require (
   }
 
   private countRemainingErrors(buildOutput: string): number {
+    if (!buildOutput || buildOutput.trim() === '') {
+      return 0;
+    }
+    
     const errorPatterns = [
       /error:/gi,
       /Error:/gi,
@@ -538,8 +554,36 @@ require (
   }
 
   private async generateTypeScriptImportFix(input: BuildFixerInput, error: BuildError): Promise<BuildFix | null> {
-    // TypeScript import fix implementation
-    return null;
+    const importPattern = /Cannot find module|Module not found/;
+    if (!importPattern.test(error.message)) {
+      return null;
+    }
+
+    // Extract the problematic import path
+    const matches = error.message.match(/'([^']+)'|"([^"]+)"/);
+    if (!matches) return null;
+
+    const oldImportPath = matches[1] || matches[2];
+    
+    // Check if this is a moved file in the refactoring manifest
+    const manifest = input.refactoringManifest as any;
+    const newImportPath = manifest?.movedFiles?.[oldImportPath];
+    
+    if (!newImportPath) return null;
+
+    const fileContent = fs.readFileSync(error.file, 'utf-8');
+    const updatedContent = fileContent.replace(
+      new RegExp(`['"]${oldImportPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`, 'g'),
+      `'${newImportPath}'`
+    );
+
+    return {
+      type: 'import',
+      file: error.file,
+      description: `Update TypeScript import path from "${oldImportPath}" to "${newImportPath}"`,
+      patch: this.generatePatch(fileContent, updatedContent),
+      confidence: 0.85,
+    };
   }
 
   private async generateTsConfigFix(input: BuildFixerInput): Promise<BuildFix | null> {
@@ -548,8 +592,39 @@ require (
   }
 
   private async generatePythonImportFix(input: BuildFixerInput, error: BuildError): Promise<BuildFix | null> {
-    // Python import fix implementation
-    return null;
+    const importPattern = /No module named|ModuleNotFoundError/;
+    if (!importPattern.test(error.message)) {
+      return null;
+    }
+
+    // Extract the problematic module name
+    const matches = error.message.match(/'([^']+)'|"([^"]+)"/);
+    if (!matches) return null;
+
+    const oldModuleName = matches[1] || matches[2];
+    
+    // Check if this module was moved in the refactoring manifest
+    const manifest = input.refactoringManifest as any;
+    const newModuleName = manifest?.movedModules?.[oldModuleName];
+    
+    if (!newModuleName) return null;
+
+    const fileContent = fs.readFileSync(error.file, 'utf-8');
+    const updatedContent = fileContent.replace(
+      new RegExp(`import\\s+${oldModuleName}\\b`, 'g'),
+      `import ${newModuleName}`
+    ).replace(
+      new RegExp(`from\\s+${oldModuleName}\\b`, 'g'),
+      `from ${newModuleName}`
+    );
+
+    return {
+      type: 'import',
+      file: error.file,
+      description: `Update Python import from "${oldModuleName}" to "${newModuleName}"`,
+      patch: this.generatePatch(fileContent, updatedContent),
+      confidence: 0.8,
+    };
   }
 
   private async generatePythonInitFixes(input: BuildFixerInput): Promise<BuildFix[]> {
