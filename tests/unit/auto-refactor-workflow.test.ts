@@ -4,12 +4,28 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 
 // Mock all agents and dependencies
-vi.mock('../../src/core/agents/enhanced-boundary-agent.js');
-vi.mock('../../src/core/agents/architect-agent.js');
-vi.mock('../../src/core/agents/refactor-agent.js');
-vi.mock('../../src/core/agents/test-synth-agent.js');
-vi.mock('../../src/core/agents/review-agent.js');
-vi.mock('fs/promises');
+vi.mock('../../src/core/agents/enhanced-boundary-agent.js', () => ({
+  EnhancedBoundaryAgent: vi.fn()
+}));
+vi.mock('../../src/core/agents/architect-agent.js', () => ({
+  ArchitectAgent: vi.fn()
+}));
+vi.mock('../../src/core/agents/refactor-agent.js', () => ({
+  RefactorAgent: vi.fn()
+}));
+vi.mock('../../src/core/agents/test-synth-agent.js', () => ({
+  TestSynthAgent: vi.fn()
+}));
+vi.mock('../../src/core/agents/review-agent.js', () => ({
+  ReviewAgent: vi.fn()
+}));
+vi.mock('fs/promises', () => ({
+  access: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  mkdir: vi.fn(),
+  stat: vi.fn()
+}));
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
   mkdirSync: vi.fn(),
@@ -17,7 +33,14 @@ vi.mock('fs', () => ({
   writeFileSync: vi.fn(),
   unlinkSync: vi.fn(),
   readdirSync: vi.fn(),
-  statSync: vi.fn()
+  statSync: vi.fn(),
+  promises: {
+    access: vi.fn(),
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+    stat: vi.fn()
+  }
 }));
 vi.mock('child_process', () => ({
   execSync: vi.fn(),
@@ -136,7 +159,7 @@ describe('executeAutoRefactor', () => {
   let mockTestSynthAgent: any;
   let mockReviewAgent: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Set up mocks
     mockBoundaryAgent = createMockBoundaryAgent();
     mockArchitectAgent = createMockArchitectAgent();
@@ -144,30 +167,25 @@ describe('executeAutoRefactor', () => {
     mockTestSynthAgent = createMockTestSynthAgent();
     mockReviewAgent = createMockReviewAgent();
 
-    // Mock module imports
-    vi.doMock('../../src/core/agents/enhanced-boundary-agent.js', () => ({
-      EnhancedBoundaryAgent: vi.fn(() => mockBoundaryAgent)
-    }));
+    // Set up constructor mocks
+    const { EnhancedBoundaryAgent } = await vi.importMock('../../src/core/agents/enhanced-boundary-agent.js') as any;
+    const { ArchitectAgent } = await vi.importMock('../../src/core/agents/architect-agent.js') as any;
+    const { RefactorAgent } = await vi.importMock('../../src/core/agents/refactor-agent.js') as any;
+    const { TestSynthAgent } = await vi.importMock('../../src/core/agents/test-synth-agent.js') as any;
+    const { ReviewAgent } = await vi.importMock('../../src/core/agents/review-agent.js') as any;
 
-    vi.doMock('../../src/core/agents/architect-agent.js', () => ({
-      ArchitectAgent: vi.fn(() => mockArchitectAgent)
-    }));
-
-    vi.doMock('../../src/core/agents/refactor-agent.js', () => ({
-      RefactorAgent: vi.fn(() => mockRefactorAgent)
-    }));
-
-    vi.doMock('../../src/core/agents/test-synth-agent.js', () => ({
-      TestSynthAgent: vi.fn(() => mockTestSynthAgent)
-    }));
-
-    vi.doMock('../../src/core/agents/review-agent.js', () => ({
-      ReviewAgent: vi.fn(() => mockReviewAgent)
-    }));
+    EnhancedBoundaryAgent.mockImplementation(() => mockBoundaryAgent);
+    ArchitectAgent.mockImplementation(() => mockArchitectAgent);
+    RefactorAgent.mockImplementation(() => mockRefactorAgent);
+    TestSynthAgent.mockImplementation(() => mockTestSynthAgent);
+    ReviewAgent.mockImplementation(() => mockReviewAgent);
 
     // Mock file system
     mockedFs.access.mockResolvedValue(undefined);
     mockedFs.readFile.mockResolvedValue('test content');
+    mockedFs.writeFile.mockResolvedValue(undefined);
+    mockedFs.mkdir.mockResolvedValue(undefined);
+    mockedFsSync.existsSync.mockReturnValue(true);
 
     vi.clearAllMocks();
   });

@@ -111,9 +111,12 @@ export async function executeAutoRefactor(
     console.log('   Creating comprehensive test suites with coverage targets...');
     
     const testSynthAgent = new TestSynthAgent(absolutePath);
-    const testResult = await testSynthAgent.synthesizeTests(applyChanges ? 'internal' : 'simulation');
+    const testResult = await testSynthAgent.synthesizeTests(applyChanges ? 'internal' : 'simulation') || {
+      generated_tests: [],
+      outputPath: ''
+    };
     
-    console.log(`   ✅ Generated ${testResult.generated_tests.length} test files`);
+    console.log(`   ✅ Generated ${testResult?.generated_tests?.length || 0} test files`);
 
     // Create migration result for review agent
     const migrationResult: MigrationResult = {
@@ -195,9 +198,20 @@ export async function executeAutoRefactor(
     
     const reviewAgent = new ReviewAgent(absolutePath);
     // Use the actual migration result path from the VibeFlowPaths
-    const reviewResult = await reviewAgent.reviewChanges(paths.migrationResultPath);
+    const reviewResult = await reviewAgent.reviewChanges(paths.migrationResultPath) || {
+      outputPath: '',
+      auto_merge_decision: {
+        should_auto_merge: false,
+        confidence: 0,
+        reasons: []
+      },
+      overall_assessment: {
+        grade: 'C',
+        score: 0
+      }
+    };
     
-    if (reviewResult.auto_merge_decision.should_auto_merge && applyChanges) {
+    if (reviewResult?.auto_merge_decision?.should_auto_merge && applyChanges) {
       console.log('   ✅ AI approved changes - ready for production!');
       // In a real implementation, this would commit changes
       // await commitChanges(absolutePath, 'AI automatic refactoring complete');
@@ -210,9 +224,19 @@ export async function executeAutoRefactor(
     console.log(`🎉 Complete automatic refactoring workflow finished! (${duration} min)`);
 
     return {
-      boundaries: boundaries,
-      refactorResult,
-      testResult,
+      boundaries: boundaries || [],
+      refactorResult: refactorResult || {
+        applied_patches: [],
+        failed_patches: [],
+        created_files: [],
+        modified_files: [],
+        deleted_files: [],
+        outputPath: ''
+      },
+      testResult: testResult || {
+        generated_tests: [],
+        outputPath: ''
+      },
       validation
     };
 
