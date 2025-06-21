@@ -17,6 +17,8 @@ import { MigrationRunner } from './core/agents/migration-runner.js';
 import { ReviewAgent } from './core/agents/review-agent.js';
 import { VibeFlowPaths } from './core/utils/file-paths.js';
 import { executeAutoRefactor } from './core/workflow/auto-refactor-workflow.js';
+import { CostManager } from './core/utils/cost-manager.js';
+import { HybridRefactorAgent } from './core/agents/hybrid-refactor-agent.js';
 
 // -----------------------------------------------------------------------------
 // Workflow execution functions
@@ -266,14 +268,9 @@ program
     pattern?: string; 
     timeout?: string;
   }) => {
-    if (!process.env.CLAUDE_API_KEY) {
-      console.log(chalk.blue('📋 Running in Template Mode'));
-      console.log(chalk.gray('   High-quality code generation using proven patterns'));
-      console.log(chalk.gray('   Set CLAUDE_API_KEY for AI-powered transformation'));
-    } else {
-      console.log(chalk.green('🤖 Running in AI Mode'));
-      console.log(chalk.gray('   Intelligent code transformation with Claude'));
-    }
+    console.log(chalk.green('🤖 Running in Hybrid Mode'));
+    console.log(chalk.gray('   Claude Code SDK + Templates for optimal results'));
+    console.log(chalk.gray('   Falls back to template mode if AI unavailable'));
     console.log('');
     console.log(chalk.blue(`📁 Target: ${path}`));
     console.log(chalk.blue(`🔤 Language: ${opts.language}`));
@@ -324,6 +321,74 @@ program
       console.error(chalk.red(`❌ Refactoring failed (${duration} min elapsed):`), (error as any).message);
       console.log(chalk.red('🔄 Automatic rollback executed.'));
       console.log('');
+      process.exit(1);
+    }
+  });
+
+// -----------------------------------------------------------------------------
+// Cost estimation command
+// -----------------------------------------------------------------------------
+program
+  .command('estimate <path>')
+  .description('💰 Estimate AI transformation costs')
+  .option('-d, --detailed', 'show detailed breakdown')
+  .action(async (targetPath: string, opts: { detailed?: boolean }) => {
+    console.log(chalk.blue('💰 Cost Estimation for AI Transformation'));
+    console.log('');
+
+    try {
+      const absolutePath = path.resolve(targetPath);
+      
+      // Run boundary discovery
+      const boundaryAgent = new EnhancedBoundaryAgent(absolutePath);
+      const { domainMap } = await boundaryAgent.analyzeBoundaries();
+      
+      // Estimate with hybrid agent
+      const hybridAgent = new HybridRefactorAgent(absolutePath);
+      const estimate = await hybridAgent.estimateCost(domainMap.boundaries);
+      
+      // Check cost limits
+      const costManager = new CostManager(absolutePath);
+      await costManager.initialize();
+      const limitCheck = await costManager.checkLimits(estimate.estimatedCost, 'refactor');
+      
+      console.log(chalk.yellow('📊 Estimation Results:'));
+      console.log(chalk.gray(`   Files to process: ${estimate.fileCount}`));
+      console.log(chalk.gray(`   Estimated tokens: ${estimate.estimatedTokens.toLocaleString()}`));
+      console.log(chalk.gray(`   Estimated cost: $${estimate.estimatedCost.toFixed(2)}`));
+      console.log(chalk.gray(`   Estimated time: ${estimate.estimatedTime}`));
+      console.log('');
+      
+      const usage = costManager.getUsageReport();
+      console.log(chalk.cyan('💳 Current Usage:'));
+      console.log(chalk.gray(`   Today: $${usage.today.cost.toFixed(2)} (${usage.today.operations} operations)`));
+      console.log(chalk.gray(`   This month: $${usage.thisMonth.cost.toFixed(2)} (${usage.thisMonth.operations} operations)`));
+      console.log('');
+      console.log(chalk.cyan('🔒 Cost Limits:'));
+      console.log(chalk.gray(`   Per run: $${usage.limits.perRun.toFixed(2)}`));
+      console.log(chalk.gray(`   Daily: $${usage.limits.daily.toFixed(2)}`));
+      console.log(chalk.gray(`   Monthly: $${usage.limits.monthly.toFixed(2)}`));
+      console.log('');
+      
+      if (!limitCheck.allowed) {
+        console.log(chalk.red(`❌ ${limitCheck.reason}`));
+      } else {
+        console.log(chalk.green('✅ Within cost limits'));
+      }
+      
+      console.log(chalk.yellow('ℹ️  Using Claude Code SDK (OAuth-based)'));
+      console.log(chalk.gray('   Template mode always available as fallback'));
+
+      if (opts.detailed && domainMap.boundaries.length > 0) {
+        console.log('');
+        console.log(chalk.cyan('📁 Boundary Breakdown:'));
+        for (const boundary of domainMap.boundaries) {
+          console.log(chalk.gray(`   ${boundary.name}: ${boundary.files.length} files`));
+        }
+      }
+
+    } catch (error) {
+      console.error(chalk.red('❌ Estimation failed:'), error);
       process.exit(1);
     }
   });

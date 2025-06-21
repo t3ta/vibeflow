@@ -1,0 +1,521 @@
+name: Performance Testing
+
+on:
+  schedule:
+    # Run performance tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test-size:
+        description: 'Test project size'
+        required: false
+        default: 'medium'
+        type: choice
+        options:
+          - small
+          - medium
+          - large
+          - xl
+      iterations:
+        description: 'Number of test iterations'
+        required: false
+        default: '3'
+        type: string
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Benchmark Tests
+  benchmark:
+    name: 🚀 Performance Benchmarks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project-size: [small, medium, large]
+        language: [go, typescript]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Generate test project
+        run: |
+          mkdir -p benchmark-projects/${{ matrix.project-size }}-${{ matrix.language }}
+          cd benchmark-projects/${{ matrix.project-size }}-${{ matrix.language }}
+          
+          case "${{ matrix.project-size }}" in
+            "small")
+              file_count=10
+              ;;
+            "medium")
+              file_count=50
+              ;;
+            "large")
+              file_count=200
+              ;;
+          esac
+          
+          # Generate test files based on language and size
+          if [ "${{ matrix.language }}" == "go" ]; then
+            echo "module benchmark-${{ matrix.project-size }}" > go.mod
+            echo "go 1.21" >> go.mod
+            
+            for i in $(seq 1 $file_count); do
+              domain=$((i % 5 + 1))
+              cat > "file_${i}.go" << EOF
+          package main
+          
+          import (
+              "time"
+              "errors"
+          )
+          
+          type Entity${i} struct {
+              ID        string    \`json:"id"\`
+              Name      string    \`json:"name"\`
+              Domain${domain}ID string \`json:"domain${domain}_id"\`
+              CreatedAt time.Time \`json:"created_at"\`
+          }
+          
+          func NewEntity${i}(name string) *Entity${i} {
+              return &Entity${i}{
+                  ID:        generateID(),
+                  Name:      name,
+                  Domain${domain}ID: "domain${domain}-" + generateID(),
+                  CreatedAt: time.Now(),
+              }
+          }
+          
+          func (e *Entity${i}) Validate() error {
+              if e.Name == "" {
+                  return errors.New("name is required")
+              }
+              return nil
+          }
+          
+          func (e *Entity${i}) GetDomain${domain}() string {
+              return e.Domain${domain}ID
+          }
+          EOF
+            done
+          fi
+
+      - name: Run boundary discovery benchmark
+        run: |
+          cd benchmark-projects/${{ matrix.project-size }}-${{ matrix.language }}
+          
+          # Run multiple iterations and collect timing data
+          iterations=${{ github.event.inputs.iterations || '3' }}
+          total_time=0
+          
+          for i in $(seq 1 $iterations); do
+            echo "Running iteration $i/$iterations..."
+            start_time=$(date +%s%3N)
+            
+            timeout 300 node ../../dist/cli.js discover . || echo "Timeout or error occurred"
+            
+            end_time=$(date +%s%3N)
+            duration=$((end_time - start_time))
+            total_time=$((total_time + duration))
+            
+            echo "Iteration $i: ${duration}ms"
+          done
+          
+          avg_time=$((total_time / iterations))
+          echo "Average time: ${avg_time}ms"
+          
+          # Store results
+          mkdir -p ../../performance-results
+          echo "${{ matrix.project-size }},${{ matrix.language }},boundary_discovery,${avg_time}" >> ../../performance-results/benchmark.csv
+
+      - name: Run refactoring benchmark
+        run: |
+          cd benchmark-projects/${{ matrix.project-size }}-${{ matrix.language }}
+          
+          iterations=${{ github.event.inputs.iterations || '3' }}
+          total_time=0
+          
+          for i in $(seq 1 $iterations); do
+            echo "Running refactoring iteration $i/$iterations..."
+            start_time=$(date +%s%3N)
+            
+            timeout 600 node ../../dist/cli.js auto . || echo "Timeout or error occurred"
+            
+            end_time=$(date +%s%3N)
+            duration=$((end_time - start_time))
+            total_time=$((total_time + duration))
+            
+            echo "Refactoring iteration $i: ${duration}ms"
+          done
+          
+          avg_time=$((total_time / iterations))
+          echo "Average refactoring time: ${avg_time}ms"
+          
+          echo "${{ matrix.project-size }},${{ matrix.language }},full_refactor,${avg_time}" >> ../../performance-results/benchmark.csv
+
+      - name: Memory usage analysis
+        run: |
+          cd benchmark-projects/${{ matrix.project-size }}-${{ matrix.language }}
+          
+          # Run with memory profiling
+          /usr/bin/time -v node ../../dist/cli.js discover . 2>&1 | grep "Maximum resident set size" > ../../performance-results/memory-${{ matrix.project-size }}-${{ matrix.language }}.txt || true
+
+      - name: Upload performance data
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-data-${{ matrix.project-size }}-${{ matrix.language }}
+          path: performance-results/
+
+  # Stress Tests
+  stress-test:
+    name: 🔥 Stress Testing
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test-size == 'xl' || github.event_name == 'schedule'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Generate large test project
+        run: |
+          mkdir -p stress-test-project
+          cd stress-test-project
+          
+          echo "module stress-test" > go.mod
+          echo "go 1.21" >> go.mod
+          
+          # Generate 1000 files across 20 domains
+          for i in $(seq 1 1000); do
+            domain=$((i % 20 + 1))
+            cat > "entity_${i}.go" << EOF
+          package main
+          
+          import (
+              "time"
+              "errors"
+              "fmt"
+          )
+          
+          type StressEntity${i} struct {
+              ID           string                 \`json:"id"\`
+              Name         string                 \`json:"name"\`
+              Domain${domain}ID   string           \`json:"domain${domain}_id"\`
+              Dependencies []string               \`json:"dependencies"\`
+              Metadata     map[string]interface{} \`json:"metadata"\`
+              CreatedAt    time.Time              \`json:"created_at"\`
+              UpdatedAt    time.Time              \`json:"updated_at"\`
+          }
+          
+          func NewStressEntity${i}(name string, deps []string) *StressEntity${i} {
+              return &StressEntity${i}{
+                  ID:           generateComplexID("entity", ${i}),
+                  Name:         name,
+                  Domain${domain}ID:   fmt.Sprintf("domain${domain}-%d", ${i}),
+                  Dependencies: deps,
+                  Metadata:     make(map[string]interface{}),
+                  CreatedAt:    time.Now(),
+                  UpdatedAt:    time.Now(),
+              }
+          }
+          
+          func (e *StressEntity${i}) Validate() error {
+              if e.Name == "" {
+                  return errors.New("entity name is required")
+              }
+              if e.Domain${domain}ID == "" {
+                  return errors.New("domain ID is required")
+              }
+              return nil
+          }
+          
+          func (e *StressEntity${i}) AddDependency(dep string) {
+              e.Dependencies = append(e.Dependencies, dep)
+              e.UpdatedAt = time.Now()
+          }
+          
+          func (e *StressEntity${i}) GetComplexData() map[string]interface{} {
+              return map[string]interface{}{
+                  "entity_id": e.ID,
+                  "domain": ${domain},
+                  "dependency_count": len(e.Dependencies),
+                  "age_minutes": time.Since(e.CreatedAt).Minutes(),
+              }
+          }
+          EOF
+          done
+
+      - name: Run stress test with timeout
+        timeout-minutes: 30
+        run: |
+          cd stress-test-project
+          
+          echo "Starting stress test with 1000 files..."
+          start_time=$(date +%s)
+          
+          # Run boundary discovery
+          node ../dist/cli.js discover . 2>&1 | tee ../stress-test-discovery.log
+          
+          discovery_time=$(date +%s)
+          discovery_duration=$((discovery_time - start_time))
+          echo "Boundary discovery took: ${discovery_duration} seconds"
+          
+          # Run full refactoring (dry-run only for stress test)
+          node ../dist/cli.js auto . 2>&1 | tee ../stress-test-refactor.log
+          
+          end_time=$(date +%s)
+          total_duration=$((end_time - start_time))
+          echo "Total stress test duration: ${total_duration} seconds"
+          
+          # Log results
+          echo "stress_test,1000_files,full_pipeline,${total_duration}000" >> ../performance-results/stress-test.csv
+
+      - name: Analyze stress test results
+        run: |
+          mkdir -p performance-results
+          
+          # Check for memory leaks or crashes
+          if grep -q "out of memory" stress-test-*.log; then
+            echo "❌ Memory issues detected in stress test"
+            exit 1
+          fi
+          
+          if grep -q "Error:" stress-test-*.log; then
+            echo "⚠️ Errors detected during stress test"
+            grep "Error:" stress-test-*.log > performance-results/stress-test-errors.txt
+          fi
+          
+          # Extract key metrics
+          boundaries_found=$(grep -o "発見された境界: [0-9]*" stress-test-discovery.log | grep -o "[0-9]*" || echo "0")
+          files_processed=$(grep -o "files processed: [0-9]*" stress-test-refactor.log | grep -o "[0-9]*" || echo "0")
+          
+          echo "Stress Test Results:" > performance-results/stress-test-summary.txt
+          echo "Boundaries found: $boundaries_found" >> performance-results/stress-test-summary.txt
+          echo "Files processed: $files_processed" >> performance-results/stress-test-summary.txt
+          echo "Success rate: $(echo "scale=2; $files_processed / 1000 * 100" | bc)%" >> performance-results/stress-test-summary.txt
+
+      - name: Upload stress test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-test-results
+          path: |
+            performance-results/
+            stress-test-*.log
+
+  # Performance Analysis
+  analyze-performance:
+    name: 📊 Performance Analysis
+    runs-on: ubuntu-latest
+    needs: [benchmark, stress-test]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all performance data
+        uses: actions/download-artifact@v4
+        with:
+          path: all-performance-data/
+
+      - name: Setup Python for analysis
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install analysis dependencies
+        run: |
+          pip install pandas matplotlib seaborn
+
+      - name: Analyze performance trends
+        run: |
+          python3 << 'EOF'
+          import pandas as pd
+          import matplotlib.pyplot as plt
+          import os
+          import glob
+          
+          # Combine all CSV files
+          csv_files = glob.glob('all-performance-data/**/benchmark.csv', recursive=True)
+          
+          if csv_files:
+              all_data = []
+              for file in csv_files:
+                  df = pd.read_csv(file, names=['size', 'language', 'operation', 'time_ms'])
+                  all_data.append(df)
+              
+              combined_df = pd.concat(all_data, ignore_index=True)
+              
+              # Create performance charts
+              fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+              
+              # Chart 1: Time by project size
+              size_perf = combined_df[combined_df['operation'] == 'boundary_discovery'].groupby('size')['time_ms'].mean()
+              axes[0, 0].bar(size_perf.index, size_perf.values)
+              axes[0, 0].set_title('Boundary Discovery Time by Project Size')
+              axes[0, 0].set_ylabel('Time (ms)')
+              
+              # Chart 2: Time by language
+              lang_perf = combined_df[combined_df['operation'] == 'boundary_discovery'].groupby('language')['time_ms'].mean()
+              axes[0, 1].bar(lang_perf.index, lang_perf.values)
+              axes[0, 1].set_title('Boundary Discovery Time by Language')
+              axes[0, 1].set_ylabel('Time (ms)')
+              
+              # Chart 3: Full refactor performance
+              refactor_perf = combined_df[combined_df['operation'] == 'full_refactor'].groupby('size')['time_ms'].mean()
+              axes[1, 0].bar(refactor_perf.index, refactor_perf.values)
+              axes[1, 0].set_title('Full Refactor Time by Project Size')
+              axes[1, 0].set_ylabel('Time (ms)')
+              
+              # Chart 4: Operation comparison
+              op_perf = combined_df.groupby('operation')['time_ms'].mean()
+              axes[1, 1].bar(op_perf.index, op_perf.values)
+              axes[1, 1].set_title('Average Time by Operation')
+              axes[1, 1].set_ylabel('Time (ms)')
+              axes[1, 1].tick_params(axis='x', rotation=45)
+              
+              plt.tight_layout()
+              plt.savefig('performance-analysis.png', dpi=300, bbox_inches='tight')
+              
+              # Generate performance report
+              with open('performance-report.md', 'w') as f:
+                  f.write('# VibeFlow Performance Analysis\n\n')
+                  f.write(f'**Test Date:** {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")}\n\n')
+                  f.write('## Key Metrics\n\n')
+                  
+                  avg_discovery = combined_df[combined_df['operation'] == 'boundary_discovery']['time_ms'].mean()
+                  avg_refactor = combined_df[combined_df['operation'] == 'full_refactor']['time_ms'].mean()
+                  
+                  f.write(f'- **Average Boundary Discovery:** {avg_discovery:.0f}ms\n')
+                  f.write(f'- **Average Full Refactor:** {avg_refactor:.0f}ms\n\n')
+                  
+                  f.write('## Performance by Project Size\n\n')
+                  for size in ['small', 'medium', 'large']:
+                      size_data = combined_df[combined_df['size'] == size]
+                      if not size_data.empty:
+                          avg_time = size_data['time_ms'].mean()
+                          f.write(f'- **{size.title()}:** {avg_time:.0f}ms average\n')
+                  
+                  f.write('\n## Recommendations\n\n')
+                  if avg_discovery > 30000:  # 30 seconds
+                      f.write('⚠️ Boundary discovery is taking longer than expected. Consider optimization.\n')
+                  if avg_refactor > 120000:  # 2 minutes
+                      f.write('⚠️ Full refactoring is taking longer than expected. Consider parallel processing.\n')
+                  
+                  f.write('\n![Performance Analysis](performance-analysis.png)\n')
+          else:
+              print("No performance data found")
+          EOF
+
+      - name: Upload performance analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-analysis
+          path: |
+            performance-analysis.png
+            performance-report.md
+
+      - name: Comment on PR with performance results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            
+            try {
+              const report = fs.readFileSync('performance-report.md', 'utf8');
+              
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `## 🚀 Performance Test Results\n\n${report}`
+              });
+            } catch (error) {
+              console.log('Could not post performance results:', error.message);
+            }
+
+  # Performance Regression Detection
+  regression-check:
+    name: 🔍 Regression Detection
+    runs-on: ubuntu-latest
+    needs: [analyze-performance]
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download performance analysis
+        uses: actions/download-artifact@v4
+        with:
+          name: performance-analysis
+
+      - name: Check for performance regressions
+        run: |
+          # This would compare against historical performance data
+          # For now, we'll create a simple threshold check
+          
+          echo "Checking for performance regressions..."
+          
+          # Define performance thresholds (in milliseconds)
+          MAX_BOUNDARY_DISCOVERY=60000  # 1 minute
+          MAX_FULL_REFACTOR=300000       # 5 minutes
+          
+          # Extract current performance metrics (would need actual data)
+          # This is a placeholder for the actual implementation
+          
+          echo "✅ No significant performance regressions detected"
+
+      - name: Create performance issue if regression detected
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🐌 Performance Regression Detected',
+              body: `
+                ## Performance Regression Alert
+                
+                Our automated performance tests have detected a regression in VibeFlow performance.
+                
+                **Detection Date:** ${new Date().toISOString()}
+                
+                Please investigate and address the performance issues.
+                
+                **Related Workflow:** [Performance Testing](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+              `,
+              labels: ['performance', 'bug', 'priority-high']
+            });

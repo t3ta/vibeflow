@@ -15,8 +15,17 @@
     "prepare": "husky",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "test": "vitest",
+    "test:unit": "vitest tests/unit",
+    "test:integration": "vitest tests/integration",
+    "test:e2e": "vitest tests/e2e",
+    "test:performance": "vitest tests/performance",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest --watch",
     "security": "gitleaks detect --source . --verbose --redact",
-    "security:ci": "gitleaks detect --source . --report-format json --report-path gitleaks-report.json"
+    "security:ci": "gitleaks detect --source . --report-format json --report-path gitleaks-report.json",
+    "cli": "node dist/cli.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.0",
@@ -35,11 +44,13 @@
     "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^8.20.0",
     "@typescript-eslint/parser": "^8.20.0",
+    "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^9.17.0",
     "husky": "^9.1.7",
     "rimraf": "^6.0.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^1.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

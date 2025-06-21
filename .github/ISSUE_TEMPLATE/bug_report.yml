@@ -1,0 +1,186 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior in VibeFlow
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Please fill out the sections below to help us understand and reproduce the issue.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm you have completed the following steps
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have updated to the latest version of VibeFlow
+          required: true
+        - label: I have checked the documentation and troubleshooting guide
+          required: true
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: Provide a clear and concise description of the bug
+      placeholder: Describe what happened and what you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior
+      placeholder: |
+        1. Run command `vf auto ./my-project`
+        2. Wait for boundary discovery to complete
+        3. Observe error during refactoring phase
+        4. See error message: "..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+      placeholder: The refactoring should complete successfully and generate clean architecture files
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include error messages, logs, or screenshots
+      placeholder: Include any error messages, stack traces, or unexpected output
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Information
+      description: Provide details about your environment
+      placeholder: |
+        - OS: [e.g., macOS 14.1, Ubuntu 22.04, Windows 11]
+        - Node.js version: [e.g., 18.17.0]
+        - VibeFlow version: [e.g., 0.2.0]
+        - Project language: [e.g., Go, TypeScript, Python]
+        - Project size: [e.g., 50 files, 200 files]
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: project-structure
+    attributes:
+      label: Project Structure (if relevant)
+      description: Provide relevant project structure or file tree
+      placeholder: |
+        ```
+        my-project/
+        ├── go.mod
+        ├── main.go
+        ├── user.go
+        ├── product.go
+        └── order.go
+        ```
+      render: markdown
+
+  - type: textarea
+    id: config-files
+    attributes:
+      label: Configuration Files
+      description: Share relevant configuration files (vibeflow.config.yaml, etc.)
+      placeholder: |
+        ```yaml
+        # vibeflow.config.yaml
+        architecture:
+          pattern: clean-architecture
+          language: go
+        ```
+      render: yaml
+
+  - type: textarea
+    id: command-output
+    attributes:
+      label: Command Output
+      description: Full output from the failing command
+      placeholder: |
+        ```
+        $ vf auto ./my-project
+        🤖 Running in Hybrid Mode
+        📁 Target: ./my-project
+        
+        Step 1/6: Boundary Discovery
+        Error: ...
+        ```
+      render: shell
+
+  - type: textarea
+    id: log-files
+    attributes:
+      label: Log Files
+      description: Content of relevant log files from .vibeflow/logs/
+      placeholder: Paste relevant log file content here
+      render: text
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Bug Severity
+      description: How severe is this bug?
+      options:
+        - "Low - Minor inconvenience, workaround available"
+        - "Medium - Affects functionality but doesn't block usage"
+        - "High - Blocks normal usage, no workaround"
+        - "Critical - Data loss, security issue, or complete failure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Frequency
+      description: How often does this bug occur?
+      options:
+        - "Always - 100% of the time"
+        - "Often - More than 50% of the time"
+        - "Sometimes - Less than 50% of the time"
+        - "Rarely - Hard to reproduce"
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: Is there a workaround for this issue?
+      placeholder: Describe any workaround you've found
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information that might help us understand the issue
+      placeholder: |
+        - Related issues or discussions
+        - Similar problems in other tools
+        - Business impact
+        - Timeline constraints
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to contribute a fix?
+      options:
+        - label: I would be willing to submit a pull request to fix this issue
+        - label: I would be willing to help test a fix for this issue

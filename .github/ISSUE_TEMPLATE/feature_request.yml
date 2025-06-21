@@ -1,0 +1,232 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for VibeFlow
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a new feature! Please provide as much detail as possible to help us understand your request.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm you have completed the following steps
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have checked the roadmap to see if this is already planned
+          required: true
+        - label: I have reviewed the documentation to ensure this feature doesn't already exist
+          required: true
+
+  - type: dropdown
+    id: feature-category
+    attributes:
+      label: Feature Category
+      description: What type of feature is this?
+      options:
+        - "CLI Command - New command or command enhancement"
+        - "Core Agent - Boundary discovery, refactoring, etc."
+        - "Language Support - New programming language support"
+        - "Architecture Pattern - New architectural patterns"
+        - "AI Integration - Claude Code SDK or other AI enhancements"
+        - "Cost Management - Cost tracking and optimization"
+        - "Performance - Speed and efficiency improvements"
+        - "Configuration - New configuration options"
+        - "Output/Reporting - Better output formats or reports"
+        - "Developer Experience - Tooling and workflow improvements"
+        - "Documentation - Documentation improvements"
+        - "Other - Please specify in description"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? What pain point are you experiencing?
+      placeholder: |
+        As a developer working with large monolithic codebases, I find it difficult to...
+        
+        This causes problems because...
+        
+        Currently, I have to work around this by...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your proposed solution in detail
+      placeholder: |
+        I would like VibeFlow to support...
+        
+        This feature would work by...
+        
+        Users would interact with it like this...
+    validations:
+      required: true
+
+  - type: textarea
+    id: user-stories
+    attributes:
+      label: User Stories
+      description: Provide specific user stories for this feature
+      placeholder: |
+        - As a developer, I want to... so that I can...
+        - As a team lead, I want to... so that my team can...
+        - As a DevOps engineer, I want to... so that our CI/CD pipeline can...
+    validations:
+      required: true
+
+  - type: textarea
+    id: example-usage
+    attributes:
+      label: Example Usage
+      description: Show how this feature would be used with concrete examples
+      placeholder: |
+        ```bash
+        # New command example
+        vf new-feature --option value ./project
+        
+        # Configuration example
+        # vibeflow.config.yaml
+        new_feature:
+          enabled: true
+          options:
+            - setting1: value1
+            - setting2: value2
+        ```
+      render: markdown
+
+  - type: textarea
+    id: alternative-solutions
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative approaches?
+      placeholder: |
+        - Alternative 1: ... (pros: ..., cons: ...)
+        - Alternative 2: ... (pros: ..., cons: ...)
+        - Existing tools that do something similar: ...
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: Describe specific scenarios where this feature would be valuable
+      placeholder: |
+        1. **Large Enterprise Codebases**: When working with 1000+ file monoliths...
+        2. **Microservice Migration**: When breaking down services for Kubernetes...
+        3. **Team Collaboration**: When multiple teams need to work on the same codebase...
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - "Low - Nice to have, not urgent"
+        - "Medium - Would improve workflow significantly"
+        - "High - Critical for our team's adoption of VibeFlow"
+        - "Critical - Blocking our usage of VibeFlow"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated Complexity
+      description: How complex do you think this feature would be to implement?
+      options:
+        - "Small - Configuration change or minor enhancement"
+        - "Medium - New functionality but uses existing patterns"
+        - "Large - Significant new feature requiring new components"
+        - "Extra Large - Major architectural change or new subsystem"
+        - "Unknown - Not sure about implementation complexity"
+
+  - type: textarea
+    id: target-languages
+    attributes:
+      label: Target Languages/Frameworks
+      description: Which programming languages or frameworks should this feature support?
+      placeholder: |
+        - Go (priority: high)
+        - TypeScript (priority: high)
+        - Python (priority: medium)
+        - Java (priority: low)
+        - Framework-specific: React, Next.js, Gin, etc.
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What criteria must be met for this feature to be considered complete?
+      placeholder: |
+        - [ ] Feature works with Go projects
+        - [ ] Feature works with TypeScript projects
+        - [ ] Documentation is updated
+        - [ ] Tests are included
+        - [ ] CLI help text is updated
+        - [ ] Performance impact is minimal
+        - [ ] Backwards compatibility is maintained
+
+  - type: textarea
+    id: technical-considerations
+    attributes:
+      label: Technical Considerations
+      description: Any technical details, constraints, or implementation thoughts?
+      placeholder: |
+        - Should integrate with existing agent architecture
+        - Needs to support both template and AI modes
+        - Consider cost implications for AI features
+        - Memory usage constraints for large projects
+
+  - type: textarea
+    id: breaking-changes
+    attributes:
+      label: Breaking Changes
+      description: Would this feature require any breaking changes?
+      placeholder: |
+        - Changes to CLI command structure: ...
+        - Changes to configuration format: ...
+        - Changes to output format: ...
+        - Migration path for existing users: ...
+
+  - type: textarea
+    id: related-work
+    attributes:
+      label: Related Work
+      description: Are there similar features in other tools or related issues?
+      placeholder: |
+        - Similar features in other tools: ...
+        - Related VibeFlow issues: #123, #456
+        - Community discussions: ...
+        - Academic papers or resources: ...
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to contribute to this feature?
+      options:
+        - label: I would be willing to submit a pull request to implement this feature
+        - label: I would be willing to help design the feature specification
+        - label: I would be willing to help test this feature
+        - label: I would be willing to help document this feature
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information that would help us understand your request
+      placeholder: |
+        - Timeline requirements
+        - Budget considerations
+        - Team size and expertise
+        - Integration requirements
+        - Compliance or security considerations

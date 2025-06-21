@@ -42,11 +42,10 @@ export async function executeAutoRefactor(
 
   try {
     // Implementation Status
-    const mode = process.env.CLAUDE_API_KEY ? 'AI' : 'Template';
-    console.log(chalk.yellow(`📊 Running in ${mode} Mode:`));
+    console.log(chalk.yellow('📊 Running in Hybrid Mode:'));
     console.log(chalk.green('   ✅ Boundary Discovery - ML-powered analysis'));
     console.log(chalk.green('   ✅ Architecture Design - Clean architecture patterns'));
-    console.log(chalk.green(`   ✅ Code Generation - ${mode} mode`));
+    console.log(chalk.green('   ✅ Code Generation - Claude Code SDK + Templates'));
     console.log(chalk.green('   ✅ Test Generation - Comprehensive test suites'));
     console.log(chalk.yellow('   🚧 Quality Validation - Basic compile checks'));
     console.log(chalk.yellow('   🚧 AI Review - Rule-based analysis'));
@@ -75,7 +74,7 @@ export async function executeAutoRefactor(
     // Step 3: Code Transformation
     console.log('');
     console.log('✨ Step 3/6: Code Transformation');
-    console.log(`   Generating clean architecture code using ${mode} mode...`);
+    console.log('   Using Claude Code SDK with template fallback...');
     console.log(`   Mode: ${applyChanges ? '🔥 APPLY CHANGES' : '🔍 DRY RUN'}`);
     
     const refactorAgent = new RefactorAgent(absolutePath);

@@ -1,4 +1,5 @@
 import { ClaudeCodeConfig, RefactoredFile } from '../types/refactor.js';
+import { getErrorMessage } from './error-utils.js';
 
 interface CodeAnalysis {
   lineCount: number;
@@ -34,15 +35,35 @@ export class ClaudeCodeClient {
    * Execute code transformation query
    */
   async queryForResult(prompt: string): Promise<string> {
-    if (process.env.CLAUDE_API_KEY) {
-      // AI Mode - would use real Claude Code SDK
-      console.log('🤖 AI transformation (not yet implemented)');
-      // TODO: Implement real Claude Code SDK integration
-      // const result = await claudeCode.query({ prompt, ... });
-    } else {
-      // Template Mode - high-quality template generation
-      console.log('📋 Template-based transformation');
+    // Try Claude Code SDK first (uses OAuth login, no API key needed)
+    try {
+      console.log('🤖 AI transformation with Claude Code SDK');
+      
+      const { ClaudeCodeIntegration } = await import('./claude-code-integration.js');
+      const integration = new ClaudeCodeIntegration({
+        projectRoot: this.config.cwd
+      });
+      
+      // Extract file and boundary from prompt
+      const fileMatch = prompt.match(/File: ([^\n]+)/);
+      const boundaryMatch = prompt.match(/Boundary: ([^\n]+)/);
+      
+      if (fileMatch && boundaryMatch) {
+        const result = await integration.transformCode({
+          file: fileMatch[1],
+          boundary: boundaryMatch[1],
+          pattern: 'clean-architecture'
+        });
+        
+        return JSON.stringify(result, null, 2);
+      }
+    } catch (error) {
+      console.warn('⚠️  Claude Code SDK not available, using template mode');
+      console.warn(getErrorMessage(error));
     }
+    
+    // Template Mode - high-quality template generation
+    console.log('📋 Template-based transformation');
     
     // Extract code from prompt for basic analysis
     const codeMatch = prompt.match(/```[\w]*\n([\s\S]*?)```/);

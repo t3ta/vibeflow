@@ -21,6 +21,14 @@ export interface RefactorResult {
   created_files: string[];
   modified_files: string[];
   deleted_files: string[];
+  outputPath: string;
+  aiEnhanced?: boolean;
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCost: number;
+  };
 }
 
 export interface ClaudeCodeConfig {

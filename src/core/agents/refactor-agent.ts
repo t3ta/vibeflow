@@ -45,7 +45,7 @@ export interface RefactorAgentResult {
 export class RefactorAgent {
   private paths: VibeFlowPaths;
   private claudeClient: ClaudeCodeClient;
-  private projectRoot: string;
+  protected projectRoot: string;
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
@@ -135,7 +135,8 @@ ${originalCode}
       failed_patches: [],
       created_files: [],
       modified_files: [],
-      deleted_files: []
+      deleted_files: [],
+      outputPath: ''
     };
 
     for (const boundary of boundaries) {
@@ -213,7 +214,7 @@ ${originalCode}
   /**
    * Apply refactored files to the filesystem
    */
-  private async applyRefactoredFiles(refactoredFiles: RefactoredFile, safetyManager?: FileSafetyManager): Promise<void> {
+  protected async applyRefactoredFiles(refactoredFiles: RefactoredFile, safetyManager?: FileSafetyManager): Promise<void> {
     // Create actual files
     for (const file of refactoredFiles.refactored_files) {
       const fullPath = path.join(this.projectRoot, file.path);

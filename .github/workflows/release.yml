@@ -1,0 +1,304 @@
+name: Release Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      release-type:
+        description: 'Release type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+      dry-run:
+        description: 'Dry run (no actual release)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Pre-release validation
+  pre-release-validation:
+    name: 🔍 Pre-release Validation
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run full test suite
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run test:coverage
+          npm run build
+
+      - name: Calculate next version
+        id: version
+        run: |
+          current_version=$(node -p "require('./package.json').version")
+          echo "current-version=$current_version" >> $GITHUB_OUTPUT
+          
+          case "${{ github.event.inputs.release-type }}" in
+            "patch") next_version=$(npm version patch --no-git-tag-version --dry-run) ;;
+            "minor") next_version=$(npm version minor --no-git-tag-version --dry-run) ;;
+            "major") next_version=$(npm version major --no-git-tag-version --dry-run) ;;
+            "prerelease") next_version=$(npm version prerelease --no-git-tag-version --dry-run) ;;
+          esac
+          
+          next_version=${next_version#v}  # Remove 'v' prefix
+          echo "version=$next_version" >> $GITHUB_OUTPUT
+          echo "Next version: $next_version"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Simple changelog generation
+          echo "## Changes in v${{ steps.version.outputs.version }}" > TEMP_CHANGELOG.md
+          echo "" >> TEMP_CHANGELOG.md
+          
+          # Get commits since last tag
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$last_tag" ]; then
+            git log --oneline --pretty=format:"- %s" $last_tag..HEAD >> TEMP_CHANGELOG.md
+          else
+            git log --oneline --pretty=format:"- %s" >> TEMP_CHANGELOG.md
+          fi
+          
+          changelog=$(cat TEMP_CHANGELOG.md)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$changelog" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  # Create release
+  create-release:
+    name: 🚀 Create Release
+    runs-on: ubuntu-latest
+    needs: [pre-release-validation]
+    if: github.event.inputs.dry-run == 'false'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Update version
+        run: |
+          npm version ${{ needs.pre-release-validation.outputs.version }} --no-git-tag-version
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to v${{ needs.pre-release-validation.outputs.version }}"
+
+      - name: Create and push tag
+        run: |
+          git tag -a "v${{ needs.pre-release-validation.outputs.version }}" -m "Release v${{ needs.pre-release-validation.outputs.version }}"
+          git push origin main
+          git push origin "v${{ needs.pre-release-validation.outputs.version }}"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ needs.pre-release-validation.outputs.version }}
+          release_name: VibeFlow v${{ needs.pre-release-validation.outputs.version }}
+          body: |
+            # VibeFlow v${{ needs.pre-release-validation.outputs.version }}
+            
+            ${{ needs.pre-release-validation.outputs.changelog }}
+            
+            ## Installation
+            
+            ```bash
+            npm install -g vibeflow@${{ needs.pre-release-validation.outputs.version }}
+            ```
+            
+            ## Documentation
+            
+            - [Getting Started](https://github.com/your-org/vibeflow/blob/main/docs/getting-started/README.md)
+            - [API Reference](https://github.com/your-org/vibeflow/blob/main/docs/api/README.md)
+            - [Architecture Guide](https://github.com/your-org/vibeflow/blob/main/docs/architecture/README.md)
+            
+            ---
+            
+            🤖 **AI-Powered Code Transformation**
+            
+            Transform your monolithic codebase into clean, modular architecture with VibeFlow's intelligent refactoring pipeline.
+          draft: false
+          prerelease: ${{ github.event.inputs.release-type == 'prerelease' }}
+
+  # Publish to npm
+  publish-npm:
+    name: 📦 Publish to NPM
+    runs-on: ubuntu-latest
+    needs: [pre-release-validation, create-release]
+    if: github.event.inputs.dry-run == 'false'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.pre-release-validation.outputs.version }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run pre-publish checks
+        run: |
+          npm run typecheck
+          npm run lint
+          npm pack --dry-run
+
+      - name: Publish to NPM
+        run: |
+          if [ "${{ github.event.inputs.release-type }}" == "prerelease" ]; then
+            npm publish --tag beta
+          else
+            npm publish
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Update documentation
+  update-docs:
+    name: 📚 Update Documentation
+    runs-on: ubuntu-latest
+    needs: [pre-release-validation, create-release]
+    if: github.event.inputs.dry-run == 'false' && github.event.inputs.release-type != 'prerelease'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.pre-release-validation.outputs.version }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate API documentation
+        run: |
+          # Generate API docs if we have a doc generator
+          # npm run docs:generate
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          cname: vibeflow.dev  # If you have a custom domain
+
+  # Notify stakeholders
+  notify:
+    name: 📢 Notify Release
+    runs-on: ubuntu-latest
+    needs: [pre-release-validation, create-release, publish-npm]
+    if: always() && github.event.inputs.dry-run == 'false'
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          text: |
+            🚀 VibeFlow v${{ needs.pre-release-validation.outputs.version }} has been released!
+            
+            📦 NPM: https://www.npmjs.com/package/vibeflow
+            📋 Release Notes: https://github.com/your-org/vibeflow/releases/tag/v${{ needs.pre-release-validation.outputs.version }}
+            
+            Install: `npm install -g vibeflow@${{ needs.pre-release-validation.outputs.version }}`
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create discussion thread
+        uses: abirismyname/create-discussion@v1.2.0
+        with:
+          title: "🎉 VibeFlow v${{ needs.pre-release-validation.outputs.version }} Released!"
+          body: |
+            We're excited to announce the release of VibeFlow v${{ needs.pre-release-validation.outputs.version }}!
+            
+            ## What's New
+            
+            ${{ needs.pre-release-validation.outputs.changelog }}
+            
+            ## Installation
+            
+            ```bash
+            npm install -g vibeflow@${{ needs.pre-release-validation.outputs.version }}
+            ```
+            
+            ## Feedback
+            
+            Please share your experience with this release. If you encounter any issues, please [open an issue](https://github.com/your-org/vibeflow/issues/new).
+          category-id: "announcements"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Dry run summary
+  dry-run-summary:
+    name: 📋 Dry Run Summary
+    runs-on: ubuntu-latest
+    needs: [pre-release-validation]
+    if: github.event.inputs.dry-run == 'true'
+    steps:
+      - name: Display dry run results
+        run: |
+          echo "## 🧪 Dry Run Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release Type:** ${{ github.event.inputs.release-type }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Version:** v${{ needs.pre-release-validation.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Changelog Preview" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "${{ needs.pre-release-validation.outputs.changelog }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All checks passed!** Ready for actual release." >> $GITHUB_STEP_SUMMARY
