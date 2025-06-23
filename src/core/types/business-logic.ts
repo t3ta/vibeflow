@@ -161,3 +161,75 @@ export interface BusinessLogicMigrationContext {
   validationRequired: boolean;
   rollbackOnFailure: boolean;
 }
+
+/**
+ * 業務ロジック移行エージェントの実行パラメータ
+ */
+export interface BusinessLogicMigrationExecuteRequest {
+  projectPath: string;
+  domainMapPath: string;
+  planPath: string;
+  aiEnabled: boolean;
+  language: 'go' | 'typescript' | 'python';
+  preserveMode: 'strict' | 'adaptive' | 'optimized';
+  generateTests: boolean;
+  generateDocumentation: boolean;
+}
+
+/**
+ * 業務ロジック移行エージェントの実行結果
+ */
+export interface BusinessLogicMigrationExecuteResult {
+  migratedBoundaries: Array<{
+    name: string;
+    files: number;
+    extractedRules: number;
+    migratedRules: number;
+  }>;
+  aiProcessedFiles: number;
+  staticAnalysisFiles: number;
+  totalBusinessRules: number;
+  warnings: string[];
+  errors: string[];
+  outputPaths: {
+    extractedLogic: string;
+    migratedCode: string;
+    validationReport: string;
+  };
+}
+
+/**
+ * テスト生成エージェントの実行パラメータ
+ */
+export interface TestSynthesisExecuteRequest {
+  projectPath: string;
+  language: 'go' | 'typescript' | 'python';
+  outputPath: string;
+  documentationPath: string;
+  aiEnabled: boolean;
+  generateDocumentation: boolean;
+  localization: 'ja' | 'en';
+}
+
+/**
+ * テスト生成エージェントの実行結果
+ */
+export interface TestSynthesisExecuteResult {
+  generatedTests: Array<{
+    filePath: string;
+    testCases: number;
+    coverage: string;
+  }>;
+  generatedDocuments: Array<{
+    type: 'user-story' | 'specification' | 'test-strategy';
+    filePath: string;
+    title: string;
+  }>;
+  coverageImprovement?: {
+    improvement: number;
+    beforeCoverage: number;
+    estimatedAfterCoverage: number;
+  };
+  warnings: string[];
+  errors: string[];
+}

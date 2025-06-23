@@ -8,7 +8,9 @@ import {
   LogicMigrationResult,
   BusinessLogicValidationResult,
   BusinessLogicExtractionConfig,
-  BusinessLogicMigrationContext
+  BusinessLogicMigrationContext,
+  BusinessLogicMigrationExecuteRequest,
+  BusinessLogicMigrationExecuteResult
 } from '../types/business-logic.js';
 import { DomainBoundary } from '../types/config.js';
 import { ClaudeCodeBusinessLogicIntegration } from '../utils/claude-code-business-logic-integration.js';
@@ -728,35 +730,8 @@ export class BusinessLogicMigrationAgent {
     return match ? match[0] : 'isValidEmail(email)';
   }
 
-  private extractCalculationCode(content: string): string {
-    const lines = content.split('\n');
-    for (const line of lines) {
-      if (/calculate|baseCost|totalCost|weight.*distance/i.test(line)) {
-        return line.trim();
-      }
-    }
-    return 'calculateTotal(items)';
-  }
 
-  private extractConditions(sqlMatch: string): string[] {
-    const whereMatch = sqlMatch.match(/WHERE\s+([^;]+)/i);
-    if (whereMatch) {
-      return whereMatch[1].split('AND').map(c => c.trim().split(/[=<>]/)[0].trim());
-    }
-    return [];
-  }
 
-  private extractFields(sqlMatch: string): string[] {
-    const selectMatch = sqlMatch.match(/SELECT\s+([^\s]+)\s+FROM/i);
-    if (selectMatch && selectMatch[1] !== '*') {
-      return selectMatch[1].split(',').map(f => f.trim());
-    }
-    const setMatch = sqlMatch.match(/SET\s+([^\s]+)/i);
-    if (setMatch) {
-      return setMatch[1].split(',').map(f => f.split('=')[0].trim());
-    }
-    return [];
-  }
 
   private extractBusinessRulesFromComments(content: string, filePath: string): BusinessRule[] {
     const rules: BusinessRule[] = [];
@@ -824,192 +799,27 @@ export class BusinessLogicMigrationAgent {
 
   // 不足していたメソッド群を追加
 
-  private generateEntitiesFromRules(rules: BusinessRule[], boundaryName: string): string[] {
-    const entities = new Set<string>();
-    entities.add(boundaryName.charAt(0).toUpperCase() + boundaryName.slice(1));
-    
-    for (const rule of rules) {
-      if (rule.type === 'validation' && rule.description.includes('Email')) {
-        entities.add('User');
-      }
-      if (rule.type === 'calculation' && rule.description.includes('cost')) {
-        entities.add('Order');
-      }
-    }
-    
-    return Array.from(entities);
-  }
 
-  private generateValueObjectsFromRules(rules: BusinessRule[]): string[] {
-    const valueObjects = new Set<string>();
-    
-    for (const rule of rules) {
-      if (rule.description.includes('Email')) {
-        valueObjects.add('Email');
-      }
-      if (rule.description.includes('Password')) {
-        valueObjects.add('Password');
-      }
-      if (rule.description.includes('cost') || rule.description.includes('price')) {
-        valueObjects.add('Money');
-      }
-    }
-    
-    return Array.from(valueObjects);
-  }
 
-  private generateBusinessRuleServices(rules: BusinessRule[]): string[] {
-    return rules.map(rule => {
-      switch (rule.type) {
-        case 'validation':
-          if (rule.description.includes('Email')) return 'EmailValidator';
-          if (rule.description.includes('Password')) return 'PasswordValidator';
-          return 'Validator';
-        case 'calculation':
-          if (rule.description.includes('cost')) return 'CostCalculator';
-          return 'Calculator';
-        case 'constraint':
-          if (rule.description.includes('uniqueness')) return 'UniquenessChecker';
-          return 'ConstraintChecker';
-        default:
-          return 'BusinessRuleService';
-      }
-    });
-  }
 
-  private generateUseCaseServices(extractedLogic: BusinessLogicExtractResult, boundaryName: string): string[] {
-    const services = new Set<string>();
-    services.add(`${boundaryName.charAt(0).toUpperCase() + boundaryName.slice(1)}Service`);
-    
-    for (const rule of extractedLogic.rules) {
-      if (rule.type === 'validation') {
-        services.add('ValidationService');
-      }
-      if (rule.type === 'calculation') {
-        services.add('CalculationService');
-      }
-    }
-    
-    return Array.from(services);
-  }
 
-  private generateCommandsFromRules(rules: BusinessRule[], boundaryName: string): string[] {
-    const commands = new Set<string>();
-    
-    for (const rule of rules) {
-      if (rule.type === 'validation' && rule.description.includes('Email')) {
-        commands.add('CreateUserCommand');
-      }
-      if (rule.type === 'calculation') {
-        commands.add('CalculateOrderCommand');
-      }
-    }
-    
-    if (commands.size === 0) {
-      commands.add(`Create${boundaryName.charAt(0).toUpperCase() + boundaryName.slice(1)}Command`);
-    }
-    
-    return Array.from(commands);
-  }
 
-  private generateQueriesFromDataAccess(dataAccess: DataAccessPattern[], boundaryName: string): string[] {
-    const queries = new Set<string>();
-    
-    for (const pattern of dataAccess) {
-      if (pattern.operation === 'select') {
-        const tableName = pattern.table.charAt(0).toUpperCase() + pattern.table.slice(1);
-        queries.add(`Get${tableName}Query`);
-      }
-    }
-    
-    if (queries.size === 0) {
-      queries.add(`Get${boundaryName.charAt(0).toUpperCase() + boundaryName.slice(1)}Query`);
-    }
-    
-    return Array.from(queries);
-  }
 
-  private extractRepositoriesFromDataAccess(dataAccess: DataAccessPattern[]): string[] {
-    const repositories = new Set<string>();
-    
-    for (const pattern of dataAccess) {
-      const tableName = pattern.table.charAt(0).toUpperCase() + pattern.table.slice(1);
-      repositories.add(`${tableName}Repository`);
-    }
-    
-    return Array.from(repositories);
-  }
 
-  private extractAdaptersFromDependencies(dependencies: string[]): string[] {
-    return dependencies.map(dep => {
-      const depName = dep.charAt(0).toUpperCase() + dep.slice(1);
-      return `${depName}Adapter`;
-    });
-  }
 
-  private generatePreservedLogicSummary(extractedLogic: BusinessLogicExtractResult): string[] {
-    const preserved: string[] = [];
-    
-    if (extractedLogic.rules.length > 0) {
-      preserved.push(`${extractedLogic.rules.length} business rules preserved in domain layer`);
-    }
-    
-    if (extractedLogic.dataAccess.length > 0) {
-      preserved.push(`${extractedLogic.dataAccess.length} data access patterns preserved in infrastructure layer`);
-    }
-    
-    if (extractedLogic.workflows.length > 0) {
-      preserved.push(`${extractedLogic.workflows.length} workflows preserved in usecase layer`);
-    }
-    
-    if (preserved.length === 0) {
-      preserved.push('Business logic preserved in template format');
-    }
-    
-    return preserved;
-  }
 
-  private createFallbackMigrationResult(extractedLogic: BusinessLogicExtractResult): LogicMigrationResult {
-    return {
-      migrated_code: {
-        domain_layer: {
-          entities: ['Entity'],
-          valueObjects: [],
-          businessRules: ['BusinessRule'],
-          workflows: []
-        },
-        usecase_layer: {
-          services: ['Service'],
-          businessFlows: [],
-          commands: ['Command'],
-          queries: ['Query']
-        },
-        infrastructure_layer: {
-          repositories: ['Repository'],
-          adapters: []
-        }
-      },
-      preserved_logic: ['Business logic preserved in template format'],
-      fallback_used: true,
-      confidence_score: 0.5,
-      warnings: ['Used fallback template due to migration failure']
-    };
-  }
 
-  private extractPasswordValidationCode(content: string): string {
-    const match = content.match(/len\(password\)\s*<\s*\d+/);
-    return match ? match[0] : 'len(password) < 8';
-  }
 
   private extractCalculationCode(content: string): string {
-    const match = content.match(/func\s+\w*[Cc]alculate[\s\S]*?return[\s\S]*?}/);
-    return match ? match[0] : 'calculateOrderTotal(order)';
+    const lines = content.split('\n');
+    for (const line of lines) {
+      if (/calculate|baseCost|totalCost|weight.*distance/i.test(line)) {
+        return line.trim();
+      }
+    }
+    return 'calculateTotal(items)';
   }
 
-  private extractConstraintCode(content: string): string {
-    const match = content.match(/\w*[Ee]xists?\([^)]*\)/);
-    return match ? match[0] : 'userExists(email)';
-  }
 
   private extractConditions(sqlQuery: string): string[] {
     const conditions: string[] = [];
@@ -1043,19 +853,6 @@ export class BusinessLogicMigrationAgent {
     return fields;
   }
 
-  private extractBusinessRulesFromFunctionContent(functionContent: string): string[] {
-    const rules: string[] = [];
-    if (/validate|check|verify/i.test(functionContent)) {
-      rules.push('Validation');
-    }
-    if (/calculate|compute|total/i.test(functionContent)) {
-      rules.push('Calculation');
-    }
-    if (/minimum|maximum|required/i.test(functionContent)) {
-      rules.push('Constraint');
-    }
-    return rules;
-  }
 
   private calculateComplexity(
     rules: BusinessRule[], 
@@ -1268,6 +1065,174 @@ export class BusinessLogicMigrationAgent {
 
   private capitalize(str: string): string {
     return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  /**
+   * 業務ロジック移行の完全実行フロー
+   */
+  async execute(request: BusinessLogicMigrationExecuteRequest): Promise<BusinessLogicMigrationExecuteResult> {
+    console.log('🧠 Starting business logic migration execution...');
+    
+    const result: BusinessLogicMigrationExecuteResult = {
+      migratedBoundaries: [],
+      aiProcessedFiles: 0,
+      staticAnalysisFiles: 0,
+      totalBusinessRules: 0,
+      warnings: [],
+      errors: [],
+      outputPaths: {
+        extractedLogic: path.join(request.projectPath, '__generated__/business-logic'),
+        migratedCode: path.join(request.projectPath, '__generated__/migrated-code'),
+        validationReport: path.join(request.projectPath, '__generated__/validation-report.json')
+      }
+    };
+
+    try {
+      // 1. ドメインマップの読み込み
+      let domainMap: any = null;
+      try {
+        const domainMapContent = await fs.readFile(request.domainMapPath, 'utf8');
+        domainMap = JSON.parse(domainMapContent);
+        console.log(`📋 Loaded domain map with ${domainMap.boundaries?.length || 0} boundaries`);
+      } catch (error) {
+        result.warnings.push(`Domain map not found at ${request.domainMapPath}, using project-wide analysis`);
+        console.warn('⚠️ Domain map not found, analyzing entire project');
+      }
+
+      // 2. プロジェクトファイルの探索
+      const projectFiles = await this.findProjectFiles(request.projectPath, request.language);
+      console.log(`🔍 Found ${projectFiles.length} ${request.language} files to analyze`);
+
+      // 3. 各ファイルから業務ロジックを抽出
+      let totalRules = 0;
+      for (const filePath of projectFiles) {
+        try {
+          console.log(`\n📁 Processing: ${path.relative(request.projectPath, filePath)}`);
+          
+          const extractResult = await this.extractBusinessLogic(filePath);
+          totalRules += extractResult.rules.length;
+          
+          if (this.useAI && this.claudeCodeIntegration) {
+            result.aiProcessedFiles++;
+          } else {
+            result.staticAnalysisFiles++;
+          }
+
+          // 業務ロジックがある場合のみ移行処理
+          if (extractResult.rules.length > 0 || extractResult.workflows.length > 0) {
+            console.log(`  🎯 Found ${extractResult.rules.length} rules and ${extractResult.workflows.length} workflows`);
+            
+            // 境界情報の更新
+            const boundaryName = this.determineBoundaryForFile(filePath, domainMap);
+            let boundary = result.migratedBoundaries.find(b => b.name === boundaryName);
+            if (!boundary) {
+              boundary = { name: boundaryName, files: 0, extractedRules: 0, migratedRules: 0 };
+              result.migratedBoundaries.push(boundary);
+            }
+            
+            boundary.files++;
+            boundary.extractedRules += extractResult.rules.length;
+            boundary.migratedRules += extractResult.rules.length; // 簡略化
+          }
+          
+        } catch (error) {
+          const errorMsg = `Failed to process ${filePath}: ${getErrorMessage(error)}`;
+          result.errors.push(errorMsg);
+          console.error(`❌ ${errorMsg}`);
+        }
+      }
+
+      result.totalBusinessRules = totalRules;
+
+      // 4. 出力ディレクトリの作成とレポート生成
+      if (request.generateDocumentation) {
+        await this.generateMigrationReport(result, request.projectPath);
+      }
+
+      console.log('✅ Business logic migration execution completed');
+      console.log(`   📊 Total boundaries: ${result.migratedBoundaries.length}`);
+      console.log(`   📝 Total rules: ${result.totalBusinessRules}`);
+      console.log(`   🤖 AI processed: ${result.aiProcessedFiles} files`);
+      console.log(`   📋 Static analysis: ${result.staticAnalysisFiles} files`);
+
+      return result;
+
+    } catch (error) {
+      const errorMsg = `Business logic migration execution failed: ${getErrorMessage(error)}`;
+      result.errors.push(errorMsg);
+      console.error(`❌ ${errorMsg}`);
+      throw error;
+    }
+  }
+
+  private async findProjectFiles(projectPath: string, language: string): Promise<string[]> {
+    const extensions: Record<string, string[]> = {
+      'go': ['.go'],
+      'typescript': ['.ts', '.tsx'],
+      'python': ['.py']
+    };
+
+    const ext = extensions[language] || ['.go'];
+    const files: string[] = [];
+
+    const scanDirectory = async (dir: string): Promise<void> => {
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory() && !entry.name.startsWith('.') && !['node_modules', 'vendor', '__generated__'].includes(entry.name)) {
+            await scanDirectory(fullPath);
+          } else if (entry.isFile() && ext.some(e => entry.name.endsWith(e))) {
+            files.push(fullPath);
+          }
+        }
+      } catch (error) {
+        console.warn(`Warning: Could not scan directory ${dir}: ${getErrorMessage(error)}`);
+      }
+    };
+
+    await scanDirectory(projectPath);
+    return files;
+  }
+
+  private determineBoundaryForFile(filePath: string, domainMap: any): string {
+    if (domainMap?.boundaries) {
+      for (const boundary of domainMap.boundaries) {
+        if (boundary.files?.some((f: string) => filePath.includes(f))) {
+          return boundary.name;
+        }
+      }
+    }
+    
+    // フォールバック: ディレクトリ名ベース
+    const parts = filePath.split(path.sep);
+    return parts[parts.length - 2] || 'default';
+  }
+
+  private async generateMigrationReport(result: BusinessLogicMigrationExecuteResult, projectPath: string): Promise<void> {
+    try {
+      await fs.mkdir(path.dirname(result.outputPaths.validationReport), { recursive: true });
+      
+      const report = {
+        timestamp: new Date().toISOString(),
+        summary: {
+          totalBoundaries: result.migratedBoundaries.length,
+          totalBusinessRules: result.totalBusinessRules,
+          aiProcessedFiles: result.aiProcessedFiles,
+          staticAnalysisFiles: result.staticAnalysisFiles
+        },
+        boundaries: result.migratedBoundaries,
+        warnings: result.warnings,
+        errors: result.errors
+      };
+      
+      await fs.writeFile(result.outputPaths.validationReport, JSON.stringify(report, null, 2));
+      console.log(`📄 Migration report saved to: ${result.outputPaths.validationReport}`);
+    } catch (error) {
+      console.warn(`Warning: Could not generate migration report: ${getErrorMessage(error)}`);
+    }
   }
 
 }

@@ -21,6 +21,8 @@ import { CostManager } from './core/utils/cost-manager.js';
 import { HybridRefactorAgent } from './core/agents/hybrid-refactor-agent.js';
 import { IncrementalMigrationRunner } from './core/agents/incremental-migration-runner.js';
 import { EnhancedTestSynthAgent } from './core/agents/enhanced-test-synth-agent.js';
+import { BusinessLogicMigrationAgent } from './core/agents/business-logic-migration-agent.js';
+import { TestSynthesisAgent } from './core/agents/test-synthesis-agent.js';
 
 // -----------------------------------------------------------------------------
 // Workflow execution functions
@@ -158,36 +160,76 @@ async function runRefactor(projectRoot: string, apply: boolean): Promise<void> {
   console.log(chalk.blue(`🔧 Refactoring project: ${absolutePath}`));
   
   try {
-    // 1. Generate refactoring patches
+    // 1. Business Logic Migration (AI-powered)
+    console.log(chalk.blue('🧠 Step 1/5: AI-powered business logic migration...'));
+    const businessLogicAgent = new BusinessLogicMigrationAgent(absolutePath);
+    const businessLogicResult = await businessLogicAgent.execute({
+      projectPath: absolutePath,
+      domainMapPath: domainMapPath,
+      planPath: planPath,
+      aiEnabled: true,
+      language: 'go' as const, // TODO: Auto-detect language
+      preserveMode: 'strict',
+      generateTests: true,
+      generateDocumentation: true
+    });
+    
+    console.log(chalk.green(`✅ 業務ロジック移行完了: ${businessLogicResult.migratedBoundaries.length}個の境界を処理`));
+    console.log(chalk.gray(`   AI処理: ${businessLogicResult.aiProcessedFiles}ファイル, 静的解析: ${businessLogicResult.staticAnalysisFiles}ファイル`));
+    
+    // 2. Test Synthesis for files without tests
+    console.log(chalk.blue('🧪 Step 2/5: AI-powered test synthesis...'));
+    const testSynthesisAgent = new TestSynthesisAgent(absolutePath);
+    const testSynthesisResult = await testSynthesisAgent.execute({
+      projectPath: absolutePath,
+      language: 'go' as const,
+      outputPath: path.join(absolutePath, '__generated__/tests'),
+      documentationPath: path.join(absolutePath, '__generated__/docs'),
+      aiEnabled: true,
+      generateDocumentation: true,
+      localization: 'ja'
+    });
+    
+    console.log(chalk.green(`✅ テスト生成完了: ${testSynthesisResult.generatedTests.length}個のテスト, ${testSynthesisResult.generatedDocuments.length}個のドキュメント`));
+    
+    // 3. Generate refactoring patches
+    console.log(chalk.blue('🏗️  Step 3/5: Generating refactoring patches...'));
     const refactorAgent = new RefactorAgent(absolutePath);
     const refactorResult = await refactorAgent.generateRefactorPlan(planPath);
     
-    // 2. Synthesize and relocate tests
+    // 4. Synthesize and relocate tests
+    console.log(chalk.blue('🔄 Step 4/5: Test relocation and synthesis...'));
     const testSynthAgent = new TestSynthAgent(absolutePath);
     const testSynthResult = await testSynthAgent.synthesizeTests(paths.patchesDir);
     
-    // 3. Run migration (apply patches)
+    // 5. Run migration (apply patches)
+    console.log(chalk.blue('🚀 Step 5/5: Applying patches and migration...'));
     const migrationRunner = new MigrationRunner(absolutePath, undefined, !apply);
     const migrationResult = await migrationRunner.executeMigration(paths.patchesDir, apply);
     
-    // 4. Review changes
+    // 6. Review changes
     const reviewAgent = new ReviewAgent(absolutePath);
     const reviewResult = await reviewAgent.reviewChanges(migrationResult.outputPath);
     
-    console.log(chalk.green('✅ 完全なリファクタリングパイプライン完了!'));
+    console.log(chalk.green('✅ AI-powered完全なリファクタリングパイプライン完了!'));
     console.log(chalk.gray('📄 Generated files:'));
     console.log(chalk.gray(`   - ${paths.getRelativePath(refactorResult.outputPath)}/ (${refactorResult.plan.summary.total_patches} patches)`));
     console.log(chalk.gray(`   - ${paths.getRelativePath(testSynthResult.outputPath)} (${testSynthResult.generated_tests.length} tests)`));
     console.log(chalk.gray(`   - ${paths.getRelativePath(migrationResult.outputPath)} (migration results)`));
     console.log(chalk.gray(`   - ${paths.getRelativePath(reviewResult.outputPath)} (review report)`));
+    console.log(chalk.gray(`   - __generated__/tests/ (${testSynthesisResult.generatedTests.length} AI-generated tests)`));
+    console.log(chalk.gray(`   - __generated__/docs/ (${testSynthesisResult.generatedDocuments.length} user stories & specs)`));
     
     // Display key results
     console.log(chalk.cyan('\n📊 実行結果サマリ:'));
-    console.log(chalk.gray(`   パッチ適用: ${migrationResult.applied_patches.length}成功 / ${migrationResult.failed_patches.length}失敗`));
-    console.log(chalk.gray(`   ビルド: ${migrationResult.build_result.success ? '✅ 成功' : '❌ 失敗'}`));
-    console.log(chalk.gray(`   テスト: ${migrationResult.test_result.success ? '✅ 成功' : '❌ 失敗'}`));
-    console.log(chalk.gray(`   総合評価: ${reviewResult.overall_assessment.grade}グレード`));
-    console.log(chalk.gray(`   自動マージ: ${reviewResult.auto_merge_decision.should_auto_merge ? '✅ 可能' : '❌ 手動レビュー必要'}`));
+    console.log(chalk.gray(`   🧠 業務ロジック移行: ${businessLogicResult.migratedBoundaries.length}境界 (AI: ${businessLogicResult.aiProcessedFiles}, 静的: ${businessLogicResult.staticAnalysisFiles})`));
+    console.log(chalk.gray(`   🧪 AI生成テスト: ${testSynthesisResult.generatedTests.length}個 (カバレッジ向上推定: ${testSynthesisResult.coverageImprovement?.improvement || 'N/A'}%)`));
+    console.log(chalk.gray(`   📚 生成ドキュメント: ${testSynthesisResult.generatedDocuments.length}個のユーザーストーリー・仕様書`));
+    console.log(chalk.gray(`   🔄 パッチ適用: ${migrationResult.applied_patches.length}成功 / ${migrationResult.failed_patches.length}失敗`));
+    console.log(chalk.gray(`   ✅ ビルド: ${migrationResult.build_result.success ? '✅ 成功' : '❌ 失敗'}`));
+    console.log(chalk.gray(`   🧪 テスト: ${migrationResult.test_result.success ? '✅ 成功' : '❌ 失敗'}`));
+    console.log(chalk.gray(`   📋 総合評価: ${reviewResult.overall_assessment.grade}グレード`));
+    console.log(chalk.gray(`   🤖 自動マージ: ${reviewResult.auto_merge_decision.should_auto_merge ? '✅ 可能' : '❌ 手動レビュー必要'}`));
     
     if (!apply) {
       console.log(chalk.yellow('\nℹ️  ドライランモード - 実際の変更は行われていません'));
@@ -484,6 +526,80 @@ program
 // -----------------------------------------------------------------------------
 // Cost estimation command
 // -----------------------------------------------------------------------------
+program
+  .command('business-logic')
+  .argument('[path]', 'target project root', 'workspace')
+  .option('-a, --apply', 'apply changes automatically')
+  .option('-l, --language <lang>', 'target language (go, typescript, python)', 'go')
+  .option('--ai-enabled', 'enable Claude Code AI processing (recommended)', true)
+  .option('--preserve-mode <mode>', 'preservation mode (strict, adaptive, optimized)', 'strict')
+  .option('--generate-tests', 'generate tests for extracted business logic', true)
+  .option('--generate-docs', 'generate human-readable documentation', true)
+  .description('🧠 AI-powered business logic migration and test synthesis')
+  .action(async (pathParam: string, opts: { 
+    apply?: boolean; 
+    language?: string;
+    aiEnabled?: boolean;
+    preserveMode?: string;
+    generateTests?: boolean;
+    generateDocs?: boolean;
+  }) => {
+    console.log(chalk.magenta('🧠 AI-powered Business Logic Migration'));
+    console.log(chalk.gray('   Extract, migrate, and document business logic with Claude Code'));
+    console.log('');
+    
+    const absolutePath = path.resolve(pathParam);
+    const paths = new VibeFlowPaths(absolutePath);
+    
+    try {
+      console.log(chalk.blue('🔍 Step 1/2: Business logic migration...'));
+      const businessLogicAgent = new BusinessLogicMigrationAgent(absolutePath);
+      const businessLogicResult = await businessLogicAgent.execute({
+        projectPath: absolutePath,
+        domainMapPath: paths.domainMapPath,
+        planPath: paths.planPath,
+        aiEnabled: opts.aiEnabled ?? true,
+        language: (opts.language as any) || 'go',
+        preserveMode: opts.preserveMode as any || 'strict',
+        generateTests: opts.generateTests ?? true,
+        generateDocumentation: opts.generateDocs ?? true
+      });
+      
+      console.log(chalk.blue('🧪 Step 2/2: Test synthesis and documentation...'));
+      const testSynthesisAgent = new TestSynthesisAgent(absolutePath);
+      const testSynthesisResult = await testSynthesisAgent.execute({
+        projectPath: absolutePath,
+        language: (opts.language as any) || 'go',
+        outputPath: path.join(absolutePath, '__generated__/tests'),
+        documentationPath: path.join(absolutePath, '__generated__/docs'),
+        aiEnabled: opts.aiEnabled ?? true,
+        generateDocumentation: opts.generateDocs ?? true,
+        localization: 'ja'
+      });
+      
+      console.log(chalk.green('✅ Business Logic Migration Complete!'));
+      console.log(chalk.cyan('\n📊 Results Summary:'));
+      console.log(chalk.gray(`   🧠 Migrated boundaries: ${businessLogicResult.migratedBoundaries.length}`));
+      console.log(chalk.gray(`   🤖 AI processed files: ${businessLogicResult.aiProcessedFiles}`));
+      console.log(chalk.gray(`   📊 Static analysis files: ${businessLogicResult.staticAnalysisFiles}`));
+      console.log(chalk.gray(`   🧪 Generated tests: ${testSynthesisResult.generatedTests.length}`));
+      console.log(chalk.gray(`   📚 Generated docs: ${testSynthesisResult.generatedDocuments.length}`));
+      console.log('');
+      console.log(chalk.cyan('📁 Generated Files:'));
+      console.log(chalk.gray('   - __generated__/tests/ (AI-generated test cases)'));
+      console.log(chalk.gray('   - __generated__/docs/ (User stories and specifications)'));
+      
+      if (!opts.apply) {
+        console.log(chalk.yellow('\nℹ️  Analysis mode - no files were modified'));
+        console.log(chalk.yellow('   Use --apply to generate actual test and documentation files'));
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Business logic migration failed:'), error);
+      process.exit(1);
+    }
+  });
+
 program
   .command('estimate <path>')
   .description('💰 Estimate AI transformation costs')

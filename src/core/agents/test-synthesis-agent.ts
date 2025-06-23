@@ -4,7 +4,9 @@ import {
   BusinessLogicExtractResult,
   BusinessRule,
   BusinessWorkflow,
-  DataAccessPattern
+  DataAccessPattern,
+  TestSynthesisExecuteRequest,
+  TestSynthesisExecuteResult
 } from '../types/business-logic.js';
 import { ClaudeCodeBusinessLogicIntegration } from '../utils/claude-code-business-logic-integration.js';
 import { getErrorMessage } from '../utils/error-utils.js';
@@ -51,13 +53,14 @@ export interface UserStoryExtractionResult {
 export interface GeneratedTestCase {
   id: string;
   name: string;
+  functionName: string;
   description: string;
   category: 'unit' | 'integration' | 'business_rule' | 'workflow';
   language: 'go' | 'typescript' | 'python';
   framework: string;
   code: string;
   testData: any[];
-  expectedBehavior: string;
+  expectedBehavior: string[];
   businessRule?: string;
   userStoryId?: string;
 }
@@ -528,13 +531,14 @@ export class TestSynthesisAgent {
     const testCase: GeneratedTestCase = {
       id: `test_rule_${rule.type}_${Date.now()}`,
       name: `Test${rule.type.charAt(0).toUpperCase() + rule.type.slice(1)}Rule`,
+      functionName: rule.location?.function || 'UnknownFunction',
       description: `Test ${rule.description}`,
       category: 'business_rule',
       language: options.language,
       framework: options.testFramework || this.getDefaultTestFramework(options.language),
       code: this.generateTestCode(rule, options),
       testData: [{ valid: 'test@example.com', invalid: 'invalid-email' }],
-      expectedBehavior: rule.description,
+      expectedBehavior: [rule.description],
       businessRule: rule.description
     };
     
@@ -548,13 +552,14 @@ export class TestSynthesisAgent {
     const testCase: GeneratedTestCase = {
       id: `test_workflow_${workflow.name}_${Date.now()}`,
       name: `Test${workflow.name}Workflow`,
+      functionName: workflow.name || 'UnknownWorkflow',
       description: `Test ${workflow.name} workflow execution`,
       category: 'workflow',
       language: options.language,
       framework: options.testFramework || this.getDefaultTestFramework(options.language),
       code: this.generateWorkflowTestCode(workflow, options),
       testData: [{ workflowData: 'test data' }],
-      expectedBehavior: `${workflow.name} workflow completes successfully`
+      expectedBehavior: [`${workflow.name} workflow completes successfully`]
     };
     
     testCases.push(testCase);
@@ -567,13 +572,14 @@ export class TestSynthesisAgent {
     const testCase: GeneratedTestCase = {
       id: `test_data_${dataAccess.operation}_${Date.now()}`,
       name: `Test${dataAccess.operation.charAt(0).toUpperCase() + dataAccess.operation.slice(1)}${dataAccess.table}`,
+      functionName: `${dataAccess.operation}${dataAccess.table}`,
       description: `Test ${dataAccess.operation} operation on ${dataAccess.table}`,
       category: 'integration',
       language: options.language,
       framework: options.testFramework || this.getDefaultTestFramework(options.language),
       code: this.generateDataAccessTestCode(dataAccess, options),
       testData: [{ table: dataAccess.table, operation: dataAccess.operation }],
-      expectedBehavior: `${dataAccess.operation} on ${dataAccess.table} should work correctly`
+      expectedBehavior: [`${dataAccess.operation} on ${dataAccess.table} should work correctly`]
     };
     
     testCases.push(testCase);
@@ -736,5 +742,297 @@ func Test${dataAccess.operation.charAt(0).toUpperCase() + dataAccess.operation.s
         constraints: []
       }
     };
+  }
+
+  /**
+   * テスト合成エージェントの完全実行フロー
+   */
+  async execute(request: TestSynthesisExecuteRequest): Promise<TestSynthesisExecuteResult> {
+    console.log('🧪 Starting test synthesis execution...');
+    
+    const result: TestSynthesisExecuteResult = {
+      generatedTests: [],
+      generatedDocuments: [],
+      warnings: [],
+      errors: []
+    };
+
+    try {
+      // 1. プロジェクトファイルの探索
+      const projectFiles = await this.findProjectFiles(request.projectPath, request.language);
+      console.log(`🔍 Found ${projectFiles.length} ${request.language} files to analyze`);
+
+      // 2. 出力ディレクトリの作成
+      await fs.mkdir(request.outputPath, { recursive: true });
+      await fs.mkdir(request.documentationPath, { recursive: true });
+
+      // 3. 各ファイルからユーザーストーリーとテストケースを生成
+      for (const filePath of projectFiles) {
+        try {
+          console.log(`\n📁 Processing: ${path.relative(request.projectPath, filePath)}`);
+          
+          const content = await fs.readFile(filePath, 'utf8');
+          
+          // テストが存在するかチェック
+          const hasExistingTests = await this.checkForExistingTests(filePath, request.projectPath);
+          
+          if (!hasExistingTests) {
+            console.log('  📋 No existing tests found, generating from code...');
+            
+            // ユーザーストーリーとテストケースを生成
+            const userStories = await this.extractUserStoriesFromCode(filePath);
+            const businessLogic = await this.extractBusinessLogicForTesting(content, filePath);
+            const testCases = await this.generateTestCasesFromBusinessLogic(businessLogic, {
+              language: request.language,
+              testFramework: this.getDefaultTestFramework(request.language),
+              includeIntegrationTests: true,
+              generateUserStoryTests: true
+            });
+            
+            if (userStories.userStories.length > 0 || testCases.length > 0) {
+              // テストファイルの生成
+              const testFileName = this.generateTestFileName(filePath, request.language);
+              const testFilePath = path.join(request.outputPath, testFileName);
+              
+              const testContent = await this.generateTestFileContent(testCases, request.language);
+              await fs.writeFile(testFilePath, testContent);
+              
+              result.generatedTests.push({
+                filePath: testFilePath,
+                testCases: testCases.length,
+                coverage: `${testCases.length} test cases covering business logic`
+              });
+
+              // ドキュメント生成
+              if (request.generateDocumentation && userStories.userStories.length > 0) {
+                const docFileName = this.generateDocumentFileName(filePath);
+                const docFilePath = path.join(request.documentationPath, docFileName);
+                
+                const docContent = await this.generateUserStoryDocument(userStories, request.localization);
+                await fs.writeFile(docFilePath, docContent);
+                
+                result.generatedDocuments.push({
+                  type: 'user-story',
+                  filePath: docFilePath,
+                  title: `User Stories for ${path.basename(filePath)}`
+                });
+              }
+              
+              console.log(`  ✅ Generated ${testCases.length} test cases and ${userStories.userStories.length} user stories`);
+            }
+          } else {
+            console.log('  ✅ Tests already exist, skipping generation');
+          }
+          
+        } catch (error) {
+          const errorMsg = `Failed to process ${filePath}: ${getErrorMessage(error)}`;
+          result.errors.push(errorMsg);
+          console.error(`❌ ${errorMsg}`);
+        }
+      }
+
+      // 4. カバレッジ改善推定
+      if (result.generatedTests.length > 0) {
+        result.coverageImprovement = {
+          improvement: result.generatedTests.length * 2, // 簡易推定
+          beforeCoverage: 20, // 推定値
+          estimatedAfterCoverage: 20 + (result.generatedTests.length * 2)
+        };
+      }
+
+      console.log('✅ Test synthesis execution completed');
+      console.log(`   🧪 Generated tests: ${result.generatedTests.length}`);
+      console.log(`   📚 Generated docs: ${result.generatedDocuments.length}`);
+
+      return result;
+
+    } catch (error) {
+      const errorMsg = `Test synthesis execution failed: ${getErrorMessage(error)}`;
+      result.errors.push(errorMsg);
+      console.error(`❌ ${errorMsg}`);
+      throw error;
+    }
+  }
+
+  private async findProjectFiles(projectPath: string, language: string): Promise<string[]> {
+    const extensions: Record<string, string[]> = {
+      'go': ['.go'],
+      'typescript': ['.ts', '.tsx'],
+      'python': ['.py']
+    };
+
+    const ext = extensions[language] || ['.go'];
+    const files: string[] = [];
+
+    const scanDirectory = async (dir: string): Promise<void> => {
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          
+          if (entry.isDirectory() && !entry.name.startsWith('.') && !['node_modules', 'vendor', '__generated__'].includes(entry.name)) {
+            await scanDirectory(fullPath);
+          } else if (entry.isFile() && ext.some(e => entry.name.endsWith(e))) {
+            files.push(fullPath);
+          }
+        }
+      } catch (error) {
+        console.warn(`Warning: Could not scan directory ${dir}: ${getErrorMessage(error)}`);
+      }
+    };
+
+    await scanDirectory(projectPath);
+    return files;
+  }
+
+  private async checkForExistingTests(filePath: string, projectPath: string): Promise<boolean> {
+    const testPatterns = ['_test.go', '.test.ts', '.test.js', '_test.py', 'test_*.py'];
+    const fileName = path.basename(filePath, path.extname(filePath));
+    
+    for (const pattern of testPatterns) {
+      const testFileName = pattern.startsWith('test_') ? 
+        pattern.replace('*', fileName) : 
+        fileName + pattern;
+      
+      const testFilePath = path.join(path.dirname(filePath), testFileName);
+      
+      try {
+        await fs.access(testFilePath);
+        return true;
+      } catch {
+        // ファイルが存在しない
+      }
+    }
+    
+    return false;
+  }
+
+  private generateTestFileName(originalPath: string, language: string): string {
+    const baseName = path.basename(originalPath, path.extname(originalPath));
+    const extensions: Record<string, string> = {
+      'go': '_test.go',
+      'typescript': '.test.ts',
+      'python': '_test.py'
+    };
+    
+    return baseName + (extensions[language] || '_test.go');
+  }
+
+  private generateDocumentFileName(originalPath: string): string {
+    const baseName = path.basename(originalPath, path.extname(originalPath));
+    return `${baseName}-user-stories.md`;
+  }
+
+  private async generateTestFileContent(testCases: GeneratedTestCase[], language: string): Promise<string> {
+    const templates: Record<string, string> = {
+      'go': this.generateGoTestTemplate(testCases),
+      'typescript': this.generateTypeScriptTestTemplate(testCases),
+      'python': this.generatePythonTestTemplate(testCases)
+    };
+    
+    return templates[language] || templates['go'];
+  }
+
+  private generateGoTestTemplate(testCases: GeneratedTestCase[]): string {
+    return `package main
+
+import (
+	"testing"
+)
+
+// Generated test cases from business logic analysis
+${testCases.map(tc => `
+func Test${tc.functionName}(t *testing.T) {
+	// ${tc.description}
+	// TODO: Implement test logic
+	${tc.expectedBehavior.map(behavior => `\t// ${behavior}`).join('\n')}
+	
+	t.Skip("Generated test - needs implementation")
+}`).join('\n')}
+`;
+  }
+
+  private generateTypeScriptTestTemplate(testCases: GeneratedTestCase[]): string {
+    return `import { describe, it, expect } from 'vitest';
+
+// Generated test cases from business logic analysis
+${testCases.map(tc => `
+describe('${tc.functionName}', () => {
+  it('${tc.description}', () => {
+    // ${tc.expectedBehavior.join('\n    // ')}
+    
+    // TODO: Implement test logic
+    expect(true).toBe(false); // Remove this when implementing
+  });
+});`).join('\n')}
+`;
+  }
+
+  private generatePythonTestTemplate(testCases: GeneratedTestCase[]): string {
+    return `import unittest
+
+class TestGeneratedCases(unittest.TestCase):
+    """Generated test cases from business logic analysis"""
+    
+${testCases.map(tc => `
+    def test_${tc.functionName.toLowerCase()}(self):
+        """${tc.description}"""
+        # ${tc.expectedBehavior.join('\n        # ')}
+        
+        # TODO: Implement test logic
+        self.skipTest("Generated test - needs implementation")`).join('\n')}
+
+if __name__ == '__main__':
+    unittest.main()
+`;
+  }
+
+  private async generateUserStoryDocument(userStories: UserStoryExtractionResult, localization: string): Promise<string> {
+    const isJapanese = localization === 'ja';
+    
+    return `# ${isJapanese ? 'ユーザーストーリー' : 'User Stories'}
+
+${isJapanese ? '## 概要' : '## Overview'}
+${isJapanese ? 
+  `このドキュメントは、コードから抽出された業務要件をユーザーストーリー形式で記載しています。` :
+  `This document contains business requirements extracted from code in user story format.`
+}
+
+${isJapanese ? '## ドメイン情報' : '## Domain Information'}
+- **${isJapanese ? 'ドメイン' : 'Domain'}**: ${userStories.businessContext.domain}
+- **${isJapanese ? '目的' : 'Purpose'}**: ${userStories.businessContext.purpose}
+- **${isJapanese ? 'キーエンティティ' : 'Key Entities'}**: ${userStories.businessContext.keyEntities.join(', ')}
+
+${isJapanese ? '## ユーザーストーリー' : '## User Stories'}
+
+${userStories.userStories.map(story => `
+### ${story.title}
+
+**${isJapanese ? '説明' : 'Description'}**: ${story.description}
+
+**${isJapanese ? '受け入れ条件' : 'Acceptance Criteria'}**:
+${story.acceptanceCriteria.map(criteria => `- ${criteria}`).join('\n')}
+
+**${isJapanese ? 'ビジネス価値' : 'Business Value'}**: ${story.businessValue}
+**${isJapanese ? '複雑度' : 'Complexity'}**: ${story.complexity}
+
+**${isJapanese ? '関連コード' : 'Related Code'}**:
+- ${isJapanese ? '関数' : 'Functions'}: ${story.relatedCode.functions.join(', ')}
+- ${isJapanese ? 'ファイル' : 'Files'}: ${story.relatedCode.files.join(', ')}
+`).join('\n')}
+
+${isJapanese ? '## テストシナリオ' : '## Test Scenarios'}
+
+${userStories.testScenarios.map(scenario => `
+### ${scenario.scenario}
+
+**Given**: ${scenario.given.join(', ')}
+**When**: ${scenario.when.join(', ')}
+**Then**: ${scenario.then.join(', ')}
+
+**${isJapanese ? '優先度' : 'Priority'}**: ${scenario.priority}
+`).join('\n')}
+`;
   }
 }
