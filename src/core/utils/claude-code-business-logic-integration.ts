@@ -29,7 +29,7 @@ export class ClaudeCodeBusinessLogicIntegration {
     });
     
     this.config = {
-      model: config.model || 'claude-3-sonnet',
+      model: config.model || 'claude-3-5-sonnet-20241022',
       maxTokens: config.maxTokens || 4096,
       temperature: config.temperature || 0.1
     };

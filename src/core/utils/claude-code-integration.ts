@@ -19,7 +19,7 @@ export class ClaudeCodeIntegration {
   constructor(config: ClaudeCodeIntegrationConfig) {
     this.config = {
       maxTurns: 3,
-      model: 'claude-3-sonnet-20240229',
+      model: 'claude-3-5-sonnet-20241022',
       ...config
     };
   }
@@ -170,6 +170,9 @@ Return as JSON with keys: businessLogic, patterns, dependencies, suggestions
       };
     } catch (error) {
       console.error('❌ Code analysis failed:', getErrorMessage(error));
+      console.error('   Error details:', error);
+      console.error('   Project root:', this.config.projectRoot);
+      console.error('   Model:', this.config.model);
       return {
         businessLogic: [],
         patterns: [],
