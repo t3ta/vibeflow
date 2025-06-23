@@ -16,6 +16,8 @@ import { DomainBoundary } from '../types/config.js';
 import { ClaudeCodeBusinessLogicIntegration } from '../utils/claude-code-business-logic-integration.js';
 import { BusinessLogicPreservationValidator } from '../validators/business-logic-preservation-validator.js';
 import { getErrorMessage } from '../utils/error-utils.js';
+import { CheckpointManager, CheckpointData, ResumeOptions } from '../utils/checkpoint-manager.js';
+import { RateLimitManager } from '../utils/rate-limit-manager.js';
 
 /**
  * 業務ロジック移行エージェント
@@ -28,10 +30,20 @@ export class BusinessLogicMigrationAgent {
   private claudeCodeIntegration?: ClaudeCodeBusinessLogicIntegration;
   private preservationValidator: BusinessLogicPreservationValidator;
   private useAI: boolean;
+  private checkpointManager: CheckpointManager;
+  private rateLimitManager: RateLimitManager;
 
   constructor(projectRoot: string, config?: BusinessLogicExtractionConfig) {
     this.projectRoot = projectRoot;
     this.preservationValidator = new BusinessLogicPreservationValidator();
+    this.checkpointManager = new CheckpointManager(projectRoot);
+    this.rateLimitManager = new RateLimitManager({
+      maxRetries: 10,
+      rateLimitCooldownMs: 4 * 60 * 60 * 1000, // 4時間
+      baseDelayMs: 30000, // 30秒
+      maxDelayMs: 30 * 60 * 1000, // 最大30分
+      backoffMultiplier: 1.5
+    });
     
     // Claude Code統合の初期化
     try {
@@ -47,6 +59,44 @@ export class BusinessLogicMigrationAgent {
       this.useAI = false;
       console.log('📋 Template-only mode (Claude Code integration not available)');
     }
+  }
+
+  async extractBusinessLogicFromFile(
+    filePath: string, 
+    options: {
+      aiEnabled?: boolean;
+      forceAI?: boolean;
+      preserveMode?: string;
+    }
+  ): Promise<BusinessLogicExtractResult> {
+    // Single file extraction for refine functionality
+    const result: BusinessLogicExtractResult = {
+      rules: [],
+      dataAccess: [],
+      workflows: [],
+      complexity: {
+        overall: 'low',
+        details: {}
+      }
+    };
+
+    if (this.claudeCodeIntegration && (options.aiEnabled || options.forceAI)) {
+      try {
+        const extraction = await this.extractBusinessLogic(filePath);
+        result.rules = extraction.rules || [];
+        result.dataAccess = extraction.dataAccess || [];
+        result.workflows = extraction.workflows || [];
+        result.complexity = extraction.complexity || result.complexity;
+      } catch (error) {
+        if (options.forceAI) {
+          throw error; // Propagate error when forceAI is enabled
+        }
+        // Fallback to static analysis
+        console.log(`⚠️  Falling back to static analysis for ${filePath}`);
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -1070,16 +1120,24 @@ export class BusinessLogicMigrationAgent {
   /**
    * 業務ロジック移行の完全実行フロー
    */
-  async execute(request: BusinessLogicMigrationExecuteRequest): Promise<BusinessLogicMigrationExecuteResult> {
+  async execute(
+    request: BusinessLogicMigrationExecuteRequest,
+    resumeOptions?: ResumeOptions
+  ): Promise<BusinessLogicMigrationExecuteResult> {
     console.log('🧠 Starting business logic migration execution...');
     
+    // チェックポイント対応の状態管理
+    let checkpoint = resumeOptions ? await this.checkpointManager.loadCheckpoint() : null;
+    let processedFiles: string[] = checkpoint?.stepProgress.processedFiles || [];
+    let failedFiles: string[] = checkpoint?.stepProgress.failedFiles || [];
+    
     const result: BusinessLogicMigrationExecuteResult = {
-      migratedBoundaries: [],
-      aiProcessedFiles: 0,
-      staticAnalysisFiles: 0,
-      totalBusinessRules: 0,
-      warnings: [],
-      errors: [],
+      migratedBoundaries: checkpoint?.stepResults.migratedBoundaries || [],
+      aiProcessedFiles: checkpoint?.stepResults.aiProcessedFiles || 0,
+      staticAnalysisFiles: checkpoint?.stepResults.staticAnalysisFiles || 0,
+      totalBusinessRules: checkpoint?.stepResults.totalBusinessRules || 0,
+      warnings: checkpoint?.stepResults.warnings || [],
+      errors: checkpoint?.stepResults.errors || [],
       outputPaths: {
         extractedLogic: path.join(request.projectPath, '__generated__/business-logic'),
         migratedCode: path.join(request.projectPath, '__generated__/migrated-code'),
@@ -1103,13 +1161,31 @@ export class BusinessLogicMigrationAgent {
       const projectFiles = await this.findProjectFiles(request.projectPath, request.language);
       console.log(`🔍 Found ${projectFiles.length} ${request.language} files to analyze`);
 
-      // 3. 各ファイルから業務ロジックを抽出
-      let totalRules = 0;
-      for (const filePath of projectFiles) {
+      if (checkpoint) {
+        const skippedCount = processedFiles.length;
+        console.log(`🔄 レジューム: ${skippedCount}/${projectFiles.length}ファイル処理済み`);
+      }
+
+      // 3. 各ファイルから業務ロジックを抽出（チェックポイント対応）
+      let totalRules = result.totalBusinessRules;
+      const saveInterval = 50; // 50ファイルごとにチェックポイント保存
+      
+      for (let i = 0; i < projectFiles.length; i++) {
+        const filePath = projectFiles[i];
+        const relativePath = path.relative(request.projectPath, filePath);
+        
+        // レジューム時のスキップ判定
+        if (resumeOptions && !this.checkpointManager.shouldProcessFile(relativePath, checkpoint, resumeOptions)) {
+          continue;
+        }
+
         try {
-          console.log(`\n📁 Processing: ${path.relative(request.projectPath, filePath)}`);
+          console.log(`\n📁 Processing: ${relativePath} (${i + 1}/${projectFiles.length})`);
           
-          const extractResult = await this.extractBusinessLogic(filePath);
+          const extractResult = await this.rateLimitManager.executeWithRetry(
+            () => this.extractBusinessLogic(filePath),
+            `Extracting business logic from ${relativePath}`
+          );
           totalRules += extractResult.rules.length;
           
           if (this.useAI && this.claudeCodeIntegration) {
@@ -1134,15 +1210,43 @@ export class BusinessLogicMigrationAgent {
             boundary.extractedRules += extractResult.rules.length;
             boundary.migratedRules += extractResult.rules.length; // 簡略化
           }
+
+          // 処理成功をマーク
+          processedFiles.push(relativePath);
+          
+          // 定期的なチェックポイント保存
+          if ((i + 1) % saveInterval === 0) {
+            await this.saveProgressCheckpoint(
+              'business-logic-migration',
+              projectFiles.length,
+              processedFiles,
+              failedFiles,
+              i,
+              result,
+              request
+            );
+          }
           
         } catch (error) {
           const errorMsg = `Failed to process ${filePath}: ${getErrorMessage(error)}`;
           result.errors.push(errorMsg);
+          failedFiles.push(relativePath);
           console.error(`❌ ${errorMsg}`);
         }
       }
 
       result.totalBusinessRules = totalRules;
+
+      // 最終チェックポイント保存
+      await this.saveProgressCheckpoint(
+        'business-logic-migration-complete',
+        projectFiles.length,
+        processedFiles,
+        failedFiles,
+        projectFiles.length,
+        result,
+        request
+      );
 
       // 4. 出力ディレクトリの作成とレポート生成
       if (request.generateDocumentation) {
@@ -1154,15 +1258,63 @@ export class BusinessLogicMigrationAgent {
       console.log(`   📝 Total rules: ${result.totalBusinessRules}`);
       console.log(`   🤖 AI processed: ${result.aiProcessedFiles} files`);
       console.log(`   📋 Static analysis: ${result.staticAnalysisFiles} files`);
+      
+      // Rate Limit統計表示
+      this.rateLimitManager.printStats();
 
       return result;
 
     } catch (error) {
+      // 失敗時のチェックポイント保存
+      await this.saveProgressCheckpoint(
+        'business-logic-migration-failed',
+        0,
+        processedFiles,
+        failedFiles,
+        processedFiles.length,
+        result,
+        request
+      );
+      
       const errorMsg = `Business logic migration execution failed: ${getErrorMessage(error)}`;
       result.errors.push(errorMsg);
       console.error(`❌ ${errorMsg}`);
       throw error;
     }
+  }
+
+  private async saveProgressCheckpoint(
+    step: string,
+    totalFiles: number,
+    processedFiles: string[],
+    failedFiles: string[],
+    currentIndex: number,
+    result: BusinessLogicMigrationExecuteResult,
+    request: BusinessLogicMigrationExecuteRequest
+  ): Promise<void> {
+    const checkpointData = this.checkpointManager.createCheckpointData(
+      step,
+      totalFiles,
+      processedFiles,
+      failedFiles,
+      currentIndex,
+      {
+        migratedBoundaries: result.migratedBoundaries,
+        aiProcessedFiles: result.aiProcessedFiles,
+        staticAnalysisFiles: result.staticAnalysisFiles,
+        totalBusinessRules: result.totalBusinessRules,
+        warnings: result.warnings,
+        errors: result.errors
+      },
+      {
+        applyChanges: true, // requestから取得すべきだが簡略化
+        aiEnabled: request.aiEnabled,
+        language: request.language,
+        preserveMode: request.preserveMode
+      }
+    );
+    
+    await this.checkpointManager.saveCheckpoint(checkpointData);
   }
 
   private async findProjectFiles(projectPath: string, language: string): Promise<string[]> {

@@ -23,6 +23,7 @@ import { IncrementalMigrationRunner } from './core/agents/incremental-migration-
 import { EnhancedTestSynthAgent } from './core/agents/enhanced-test-synth-agent.js';
 import { BusinessLogicMigrationAgent } from './core/agents/business-logic-migration-agent.js';
 import { TestSynthesisAgent } from './core/agents/test-synthesis-agent.js';
+import { handleResumeFlow } from './core/utils/checkpoint-manager.js';
 
 // -----------------------------------------------------------------------------
 // Workflow execution functions
@@ -135,7 +136,7 @@ async function planTasks(projectRoot: string): Promise<void> {
   }
 }
 
-async function runRefactor(projectRoot: string, apply: boolean): Promise<void> {
+async function runRefactor(projectRoot: string, apply: boolean, resumeOptions?: any): Promise<void> {
   const absolutePath = path.resolve(projectRoot);
   const paths = new VibeFlowPaths(absolutePath);
   
@@ -404,27 +405,81 @@ program
   .option('--max-stage-size <number>', 'maximum patches per stage (default: 5)', '5')
   .option('--resume-from-stage <number>', 'resume from specific stage number')
   .option('--skip-stages <numbers>', 'comma-separated list of stages to skip')
+  .option('--resume', 'resume from previous checkpoint')
+  .option('--retry-failed', 'retry previously failed files during resume')
+  .option('--clear-checkpoint', 'clear existing checkpoint and start fresh')
+  .option('--from-step <step>', 'resume from specific step (boundary, migration, refactor, test, review)')
+  .option('--only-files <files...>', 'process only specified files or patterns')
   .description('Execute refactor according to plan')
-  .action(async (path: string, opts: { 
+  .action(async (pathParam: string, opts: { 
     apply?: boolean; 
     incremental?: boolean;
     maxStageSize?: string;
     resumeFromStage?: string;
     skipStages?: string;
+    resume?: boolean;
+    retryFailed?: boolean;
+    clearCheckpoint?: boolean;
+    fromStep?: string;
+    onlyFiles?: string[];
   }) => {
     console.log(chalk.green('▶ running refactor...'));
     
+    // Handle resume flow first
+    const absolutePath = path.resolve(pathParam);
+    const { shouldResume, checkpoint, resumeOptions } = await handleResumeFlow(absolutePath, {
+      resume: opts.resume,
+      retryFailed: opts.retryFailed,
+      fromStep: opts.fromStep,
+      clearCheckpoint: opts.clearCheckpoint,
+      onlyFiles: opts.onlyFiles
+    });
+    
+    if (opts.clearCheckpoint) {
+      return; // Exit after clearing checkpoint
+    }
+    
     if (opts.incremental) {
       console.log(chalk.cyan('🔄 インクリメンタルモード - 段階的に安全に実行します'));
-      await runIncrementalRefactor(path, {
+      await runIncrementalRefactor(pathParam, {
         apply: opts.apply ?? false,
         maxStageSize: parseInt(opts.maxStageSize || '5'),
         resumeFromStage: opts.resumeFromStage ? parseInt(opts.resumeFromStage) : undefined,
         skipStages: opts.skipStages ? opts.skipStages.split(',').map(n => parseInt(n.trim())) : [],
       });
     } else {
-      await runRefactor(path, opts.apply ?? false);
+      await runRefactor(pathParam, opts.apply ?? false, shouldResume ? resumeOptions : undefined);
     }
+  });
+
+// Add quality analysis command
+program
+  .command('analyze-quality')
+  .argument('[path]', 'target project root', 'workspace')
+  .option('-l, --log <path>', 'path to refactor log file')
+  .description('Analyze refactoring quality and determine if rerun is needed')
+  .action(async (targetPath: string, opts: { log?: string }) => {
+    const { analyzeRefactorQuality } = await import('./core/utils/refactor-quality-analyzer.js');
+    const absolutePath = path.isAbsolute(targetPath) ? targetPath : path.join(process.cwd(), targetPath);
+    await analyzeRefactorQuality(absolutePath, opts.log);
+  });
+
+// Add refine command for selective re-processing
+program
+  .command('refine')
+  .argument('[path]', 'target project root', 'workspace')
+  .option('-l, --log <path>', 'path to refactor log file')
+  .option('-f, --files <files...>', 'specific files to refine')
+  .option('--force-ai', 'force AI processing even with rate limits')
+  .description('Refine specific files that need quality improvement')
+  .action(async (targetPath: string, opts: { log?: string; files?: string[]; forceAi?: boolean }) => {
+    const { runRefine } = await import('./core/agents/refine-agent.js');
+    const absolutePath = path.isAbsolute(targetPath) ? targetPath : path.join(process.cwd(), targetPath);
+    await runRefine(absolutePath, {
+      log: opts.log,
+      files: opts.files,
+      forceAI: opts.forceAi
+    });
   });
 
 program
