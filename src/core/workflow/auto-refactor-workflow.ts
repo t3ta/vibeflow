@@ -6,6 +6,7 @@ import { ReviewAgent } from '../agents/review-agent.js';
 import { CompileResult, TestResult, PerformanceResult } from '../types/refactor.js';
 import { execSync } from 'child_process';
 import * as path from 'path';
+import * as fsSync from 'fs';
 import * as fs from 'fs';
 import chalk from 'chalk';
 
@@ -291,11 +292,11 @@ async function runCompilation(projectPath: string, actualChanges: boolean): Prom
     const goModPath = path.join(projectPath, 'go.mod');
     const packageJsonPath = path.join(projectPath, 'package.json');
     
-    if (require('fs').existsSync(goModPath)) {
+    if (fsSync.existsSync(goModPath)) {
       console.log('   🔨 Compiling Go project...');
       execSync('go build ./...', { cwd: projectPath, encoding: 'utf8' });
       return { success: true, errors: [], warnings: [] };
-    } else if (require('fs').existsSync(packageJsonPath)) {
+    } else if (fsSync.existsSync(packageJsonPath)) {
       console.log('   🔨 Building TypeScript/Node project...');
       execSync('npm run build', { cwd: projectPath, encoding: 'utf8' });
       return { success: true, errors: [], warnings: [] };
@@ -331,7 +332,7 @@ async function runTestSuite(projectPath: string, actualChanges: boolean): Promis
     const goModPath = path.join(projectPath, 'go.mod');
     const packageJsonPath = path.join(projectPath, 'package.json');
     
-    if (require('fs').existsSync(goModPath)) {
+    if (fsSync.existsSync(goModPath)) {
       console.log('   🧪 Running Go tests...');
       const output = execSync('go test ./... -v', { cwd: projectPath, encoding: 'utf8' });
       
@@ -346,7 +347,7 @@ async function runTestSuite(projectPath: string, actualChanges: boolean): Promis
         failedTests: [],
         coverage: 75 // Would need to parse actual coverage
       };
-    } else if (require('fs').existsSync(packageJsonPath)) {
+    } else if (fsSync.existsSync(packageJsonPath)) {
       console.log('   🧪 Running Node.js tests...');
       execSync('npm test', { cwd: projectPath, encoding: 'utf8' });
       return {

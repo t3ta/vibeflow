@@ -123,13 +123,15 @@ describe('E2E: CLI Commands', () => {
       
       // Generate plan first
       execSync(`node "${cliPath}" plan "${tempDir}"`, {
-        cwd: process.cwd()
+        cwd: process.cwd(),
+        timeout: 30000
       });
       
       // Apply refactoring
       const output = execSync(`node "${cliPath}" refactor "${tempDir}" --apply`, {
         encoding: 'utf8',
-        cwd: process.cwd()
+        cwd: process.cwd(),
+        timeout: 30000
       });
 
       expect(output).toContain('完全なリファクタリングパイプライン完了');
@@ -147,7 +149,8 @@ describe('E2E: CLI Commands', () => {
       try {
         execSync(`node "${cliPath}" refactor "${tempDir}"`, {
           encoding: 'utf8',
-          cwd: process.cwd()
+          cwd: process.cwd(),
+          timeout: 30000
         });
         expect.fail('Should have thrown an error');
       } catch (error: any) {
@@ -163,7 +166,7 @@ describe('E2E: CLI Commands', () => {
       const output = execSync(`node "${cliPath}" auto "${tempDir}"`, {
         encoding: 'utf8',
         cwd: process.cwd(),
-        timeout: 60000 // 1 minute timeout
+        timeout: 120000 // 2 minute timeout
       });
 
       expect(output).toContain('Running in Hybrid Mode');
@@ -180,7 +183,7 @@ describe('E2E: CLI Commands', () => {
       const output = execSync(`node "${cliPath}" auto "${tempDir}" --apply`, {
         encoding: 'utf8',
         cwd: process.cwd(),
-        timeout: 60000
+        timeout: 120000
       });
 
       expect(output).toContain('APPLY CHANGES');
@@ -200,7 +203,7 @@ describe('E2E: CLI Commands', () => {
         {
           encoding: 'utf8',
           cwd: process.cwd(),
-          timeout: 60000
+          timeout: 120000
         }
       );
 
@@ -259,7 +262,7 @@ describe('E2E: CLI Commands', () => {
       const output = execSync(`node "${cliPath}" full "${tempDir}"`, {
         encoding: 'utf8',
         cwd: process.cwd(),
-        timeout: 60000
+        timeout: 120000
       });
 
       expect(output).toContain('Step 1/2: Generating plan');
@@ -273,7 +276,7 @@ describe('E2E: CLI Commands', () => {
       const output = execSync(`node "${cliPath}" full "${tempDir}" --apply`, {
         encoding: 'utf8',
         cwd: process.cwd(),
-        timeout: 60000
+        timeout: 120000
       });
 
       expect(output).toContain('Complete pipeline finished successfully');

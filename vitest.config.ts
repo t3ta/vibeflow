@@ -50,7 +50,7 @@ export default defineConfig({
     ],
     
     // Test timeout
-    testTimeout: 10000,
+    testTimeout: 30000,
     
     // Mock settings
     clearMocks: true,

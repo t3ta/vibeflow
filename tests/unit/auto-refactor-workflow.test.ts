@@ -42,6 +42,7 @@ vi.mock('fs', () => ({
     stat: vi.fn()
   }
 }));
+// Mock child_process
 vi.mock('child_process', () => ({
   execSync: vi.fn(),
   exec: vi.fn()
@@ -49,6 +50,10 @@ vi.mock('child_process', () => ({
 
 const mockedFs = vi.mocked(fs);
 const mockedFsSync = vi.mocked(fsSync);
+
+// Import child_process after mocking
+import { execSync } from 'child_process';
+const mockedExecSync = vi.mocked(execSync);
 
 // Create mock implementations
 const createMockBoundaryAgent = () => ({
@@ -167,27 +172,29 @@ describe('executeAutoRefactor', () => {
     mockTestSynthAgent = createMockTestSynthAgent();
     mockReviewAgent = createMockReviewAgent();
 
-    // Set up constructor mocks
-    const { EnhancedBoundaryAgent } = await vi.importMock('../../src/core/agents/enhanced-boundary-agent.js') as any;
-    const { ArchitectAgent } = await vi.importMock('../../src/core/agents/architect-agent.js') as any;
-    const { RefactorAgent } = await vi.importMock('../../src/core/agents/refactor-agent.js') as any;
-    const { TestSynthAgent } = await vi.importMock('../../src/core/agents/test-synth-agent.js') as any;
-    const { ReviewAgent } = await vi.importMock('../../src/core/agents/review-agent.js') as any;
-
-    EnhancedBoundaryAgent.mockImplementation(() => mockBoundaryAgent);
-    ArchitectAgent.mockImplementation(() => mockArchitectAgent);
-    RefactorAgent.mockImplementation(() => mockRefactorAgent);
-    TestSynthAgent.mockImplementation(() => mockTestSynthAgent);
-    ReviewAgent.mockImplementation(() => mockReviewAgent);
-
+    // Reset mocks
+    vi.clearAllMocks();
+    
+    // Get mocked constructors and configure them
+    const { EnhancedBoundaryAgent } = await import('../../src/core/agents/enhanced-boundary-agent.js');
+    const { ArchitectAgent } = await import('../../src/core/agents/architect-agent.js');
+    const { RefactorAgent } = await import('../../src/core/agents/refactor-agent.js');
+    const { TestSynthAgent } = await import('../../src/core/agents/test-synth-agent.js');
+    const { ReviewAgent } = await import('../../src/core/agents/review-agent.js');
+    
+    // Configure constructor mocks to return our mock instances
+    vi.mocked(EnhancedBoundaryAgent).mockImplementation(() => mockBoundaryAgent);
+    vi.mocked(ArchitectAgent).mockImplementation(() => mockArchitectAgent);
+    vi.mocked(RefactorAgent).mockImplementation(() => mockRefactorAgent);
+    vi.mocked(TestSynthAgent).mockImplementation(() => mockTestSynthAgent);
+    vi.mocked(ReviewAgent).mockImplementation(() => mockReviewAgent);
+    
     // Mock file system
     mockedFs.access.mockResolvedValue(undefined);
     mockedFs.readFile.mockResolvedValue('test content');
     mockedFs.writeFile.mockResolvedValue(undefined);
     mockedFs.mkdir.mockResolvedValue(undefined);
     mockedFsSync.existsSync.mockReturnValue(true);
-
-    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -288,10 +295,9 @@ describe('executeAutoRefactor', () => {
       );
 
       // Mock execSync for rollback commands
-      const execSyncMock = vi.fn();
-      vi.doMock('child_process', () => ({
-        execSync: execSyncMock
-      }));
+      mockedExecSync.mockImplementation(() => {
+        throw new Error('Rollback command failed');
+      });
 
       await expect(executeAutoRefactor('/tmp/test-project', true))
         .rejects.toThrow('Refactoring failed');
@@ -323,15 +329,12 @@ describe('executeAutoRefactor', () => {
   describe('validation pipeline', () => {
     it('should run compilation validation', async () => {
       // Mock go.mod exists
-      mockedFs.existsSync = vi.fn().mockImplementation((path: string) => {
+      mockedFsSync.existsSync.mockImplementation((path: string) => {
         return path.toString().includes('go.mod');
       });
 
       // Mock execSync for go build
-      const execSyncMock = vi.fn().mockReturnValue('');
-      vi.doMock('child_process', () => ({
-        execSync: execSyncMock
-      }));
+      mockedExecSync.mockReturnValue('');
 
       const result = await executeAutoRefactor('/tmp/test-project', true);
 
@@ -339,16 +342,13 @@ describe('executeAutoRefactor', () => {
     });
 
     it('should handle compilation failures', async () => {
-      mockedFs.existsSync = vi.fn().mockImplementation((path: string) => {
+      mockedFsSync.existsSync.mockImplementation((path: string) => {
         return path.toString().includes('go.mod');
       });
 
-      const execSyncMock = vi.fn().mockImplementation(() => {
+      mockedExecSync.mockImplementation(() => {
         throw new Error('Compilation error');
       });
-      vi.doMock('child_process', () => ({
-        execSync: execSyncMock
-      }));
 
       const result = await executeAutoRefactor('/tmp/test-project', true);
 
@@ -357,17 +357,13 @@ describe('executeAutoRefactor', () => {
     });
 
     it('should run test validation', async () => {
-      mockedFs.existsSync = vi.fn().mockImplementation((path: string) => {
+      mockedFsSync.existsSync.mockImplementation((path: string) => {
         return path.toString().includes('go.mod');
       });
 
-      const execSyncMock = vi.fn()
+      mockedExecSync
         .mockReturnValueOnce('') // go build
         .mockReturnValueOnce('PASS: TestUser\nPASS: TestProduct'); // go test
-
-      vi.doMock('child_process', () => ({
-        execSync: execSyncMock
-      }));
 
       const result = await executeAutoRefactor('/tmp/test-project', true);
 
@@ -387,26 +383,23 @@ describe('executeAutoRefactor', () => {
 
   describe('different project types', () => {
     it('should handle TypeScript projects', async () => {
-      mockedFs.existsSync = vi.fn().mockImplementation((path: string) => {
+      mockedFsSync.existsSync.mockImplementation((path: string) => {
         return path.toString().includes('package.json');
       });
 
-      const execSyncMock = vi.fn().mockReturnValue('');
-      vi.doMock('child_process', () => ({
-        execSync: execSyncMock
-      }));
+      mockedExecSync.mockReturnValue('');
 
       const result = await executeAutoRefactor('/tmp/ts-project', true);
 
       expect(result).toBeDefined();
-      expect(execSyncMock).toHaveBeenCalledWith(
+      expect(mockedExecSync).toHaveBeenCalledWith(
         'npm run build',
         expect.any(Object)
       );
     });
 
     it('should handle projects without known build system', async () => {
-      mockedFs.existsSync = vi.fn().mockReturnValue(false);
+      mockedFsSync.existsSync.mockReturnValue(false);
 
       const result = await executeAutoRefactor('/tmp/unknown-project', true);
 

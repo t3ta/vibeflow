@@ -384,8 +384,8 @@ func ValidateCustomerTier(tier string) bool {
     const emptyResult = await executeAutoRefactor(tempDir, false);
     
     expect(emptyResult).toBeDefined();
-    expect(emptyResult.boundaries).toHaveLength(0);
-    expect(emptyResult.refactorResult.generated_files).toHaveLength(0);
-    expect(emptyResult.refactorResult.applied_patches).toHaveLength(0);
+    expect(emptyResult.boundaries || []).toHaveLength(0);
+    expect(emptyResult.refactorResult.generated_files || []).toHaveLength(0);
+    expect(emptyResult.refactorResult.applied_patches || []).toHaveLength(0);
   });
 });

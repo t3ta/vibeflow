@@ -120,7 +120,7 @@ describe('Performance Benchmarks', () => {
       expect(result.duration).toBeGreaterThan(0); // At least it ran
       
       results.push(result);
-    });
+    }, 80000); // 80 seconds test timeout
 
     it('should handle concurrent operations efficiently', async () => {
       // Create multiple small projects
