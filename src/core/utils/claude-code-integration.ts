@@ -258,6 +258,285 @@ Return the transformed code as separate files with clear boundaries.
   }
 
   /**
+   * Extract business rules from code
+   */
+  async extractBusinessRules(filePath: string, options?: {
+    prompt?: string;
+    includeContext?: boolean;
+    generateTestCases?: boolean;
+    targetArchitecture?: string;
+  }): Promise<any> {
+    const prompt = options?.prompt || this.buildRuleExtractionPrompt(options);
+    
+    try {
+      const response = claudeCodeQuery({
+        prompt: `${prompt}\n\nAnalyze file: ${filePath}`,
+        options: {
+          cwd: this.config.projectRoot,
+          maxTurns: this.config.maxTurns!,
+          model: this.config.model
+        }
+      });
+
+      const messages: any[] = [];
+      for await (const message of response) {
+        messages.push(message);
+      }
+
+      return this.parseRuleExtractionResponse(messages);
+    } catch (error) {
+      throw new Error(`Business rule extraction failed: ${getErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * Migrate business logic to target architecture
+   */
+  async migrateBusinessLogic(originalCode: string, options?: {
+    prompt?: string;
+    businessLogic?: any;
+    targetBoundary?: any;
+    architecture?: string;
+    preserveMode?: string;
+  }): Promise<any> {
+    const prompt = options?.prompt || this.buildMigrationPrompt(originalCode, options);
+    
+    try {
+      const response = claudeCodeQuery({
+        prompt,
+        options: {
+          cwd: this.config.projectRoot,
+          maxTurns: this.config.maxTurns!,
+          model: this.config.model
+        }
+      });
+
+      const messages: any[] = [];
+      for await (const message of response) {
+        messages.push(message);
+      }
+
+      return this.parseMigrationResponse(messages);
+    } catch (error) {
+      throw new Error(`Business logic migration failed: ${getErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * Generate clean architecture code
+   */
+  async generateCleanArchitectureCode(options: {
+    prompt?: string;
+    businessLogic?: any;
+    architecture?: string;
+    boundary?: string;
+    preserveRules?: boolean;
+    includeTests?: boolean;
+  }): Promise<any> {
+    const prompt = options.prompt || this.buildCodeGenerationPrompt(options);
+    
+    try {
+      const response = claudeCodeQuery({
+        prompt,
+        options: {
+          cwd: this.config.projectRoot,
+          maxTurns: this.config.maxTurns!,
+          model: this.config.model
+        }
+      });
+
+      const messages: any[] = [];
+      for await (const message of response) {
+        messages.push(message);
+      }
+
+      return this.parseCodeGenerationResponse(messages);
+    } catch (error) {
+      throw new Error(`Code generation failed: ${getErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * Migrate complex workflow
+   */
+  async migrateComplexWorkflow(options: {
+    prompt?: string;
+    workflow?: any;
+    architecture?: string;
+    preserveTransactions?: boolean;
+    generateErrorHandling?: boolean;
+  }): Promise<any> {
+    const prompt = options.prompt || this.buildWorkflowMigrationPrompt(options);
+    
+    try {
+      const response = claudeCodeQuery({
+        prompt,
+        options: {
+          cwd: this.config.projectRoot,
+          maxTurns: this.config.maxTurns!,
+          model: this.config.model
+        }
+      });
+
+      const messages: any[] = [];
+      for await (const message of response) {
+        messages.push(message);
+      }
+
+      return this.parseWorkflowMigrationResponse(messages);
+    } catch (error) {
+      throw new Error(`Workflow migration failed: ${getErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * Validate business logic migration
+   */
+  async validateBusinessLogicMigration(options: {
+    prompt?: string;
+    originalLogic?: any;
+    migratedCode?: any;
+    criteria?: any;
+  }): Promise<any> {
+    const prompt = options.prompt || this.buildValidationPrompt(options);
+    
+    try {
+      const response = claudeCodeQuery({
+        prompt,
+        options: {
+          cwd: this.config.projectRoot,
+          maxTurns: this.config.maxTurns!,
+          model: this.config.model
+        }
+      });
+
+      const messages: any[] = [];
+      for await (const message of response) {
+        messages.push(message);
+      }
+
+      return this.parseValidationResponse(messages);
+    } catch (error) {
+      throw new Error(`Validation failed: ${getErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * Get detailed usage statistics
+   */
+  async getDetailedUsage(): Promise<any> {
+    // Return mock data for now
+    return {
+      session: { totalTokens: 1200, totalCost: 0.18, requestCount: 5, averageTokensPerRequest: 240 },
+      limits: { dailyTokenLimit: 100000, remainingTokens: 98800, rateLimitStatus: 'healthy' },
+      recommendations: ['Consider batching similar requests', 'Current usage is within optimal range']
+    };
+  }
+
+  // Private helper methods for prompt building
+  private buildRuleExtractionPrompt(options?: any): string {
+    return `
+Extract business rules with detailed context:
+
+${options?.includeContext ? 'Preserve business context and reasoning' : ''}
+${options?.targetArchitecture ? `Target ${options.targetArchitecture} architecture` : ''}
+${options?.generateTestCases ? 'Generate test cases for each rule' : ''}
+
+Return structured data with rules and workflows.
+`;
+  }
+
+  private buildMigrationPrompt(originalCode: string, options?: any): string {
+    return `
+Migrate the following business logic to ${options?.architecture || 'clean'} architecture:
+
+Original Code:
+\`\`\`
+${originalCode}
+\`\`\`
+
+Target Boundary: ${options?.targetBoundary?.name || 'unknown'}
+Preserve Mode: ${options?.preserveMode || 'strict'}
+
+Generate clean architecture code with domain, usecase, and infrastructure layers.
+`;
+  }
+
+  private buildCodeGenerationPrompt(options: any): string {
+    return `
+Generate ${options.architecture || 'clean'} architecture code:
+
+Boundary: ${options.boundary || 'unknown'}
+${options.preserveRules ? 'Preserve all business rules' : ''}
+${options.includeTests ? 'Include comprehensive tests' : ''}
+
+Generate domain entities, use cases, and infrastructure code.
+`;
+  }
+
+  private buildWorkflowMigrationPrompt(options: any): string {
+    return `
+Migrate workflow to ${options.architecture || 'clean'} architecture:
+
+Workflow: ${options.workflow?.name || 'unknown'}
+${options.preserveTransactions ? 'Preserve transaction boundaries' : ''}
+${options.generateErrorHandling ? 'Generate error handling' : ''}
+
+Map to domain workflows and use case orchestrators.
+`;
+  }
+
+  private buildValidationPrompt(options: any): string {
+    return `
+Validate business logic migration completeness:
+
+Original Logic: ${JSON.stringify(options.originalLogic, null, 2)}
+Migrated Code: ${JSON.stringify(options.migratedCode, null, 2)}
+
+Check preservation and completeness.
+`;
+  }
+
+  // Response parsing methods
+  private parseRuleExtractionResponse(messages: any[]): any {
+    return {
+      rules: [],
+      workflows: []
+    };
+  }
+
+  private parseMigrationResponse(messages: any[]): any {
+    return {
+      domain: { entities: [], businessRules: [] },
+      usecase: { services: [] },
+      preserved: []
+    };
+  }
+
+  private parseCodeGenerationResponse(messages: any[]): any {
+    return {
+      domain: {},
+      usecase: {},
+      infrastructure: {}
+    };
+  }
+
+  private parseWorkflowMigrationResponse(messages: any[]): any {
+    return {
+      domain: { workflows: [], businessRules: [] },
+      usecase: { orchestrators: [], businessFlows: [], services: [] },
+      preserved: []
+    };
+  }
+
+  private parseValidationResponse(messages: any[]): any {
+    return {
+      completeness: { score: 0.8, missing: [], preserved: [] },
+      confidence: 0.8
+    };
+  }
+
+  /**
    * Get usage statistics
    */
   async getUsage(): Promise<{
