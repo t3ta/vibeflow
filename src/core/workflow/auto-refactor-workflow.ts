@@ -15,6 +15,7 @@ import { RefactorResult } from '../types/refactor.js';
 import { TestSynthResult } from '../agents/test-synth-agent.js';
 import { MigrationResult } from '../agents/migration-runner.js';
 import { VibeFlowPaths } from '../utils/file-paths.js';
+import { detectGoProject } from '../utils/go-project-utils.js';
 
 export interface AutoRefactorResult {
   boundaries: DomainBoundary[];
@@ -289,12 +290,13 @@ async function runCompilation(projectPath: string, actualChanges: boolean): Prom
 
   try {
     // Detect Go project and run build
-    const goModPath = path.join(projectPath, 'go.mod');
+    const goProject = detectGoProject(projectPath);
     const packageJsonPath = path.join(projectPath, 'package.json');
     
-    if (fsSync.existsSync(goModPath)) {
-      console.log('   🔨 Compiling Go project...');
-      execSync('go build ./...', { cwd: projectPath, encoding: 'utf8' });
+    if (goProject.hasGoProject) {
+      const workingDir = goProject.workingDirectory!;
+      console.log(`   🔨 Compiling Go project from: ${path.relative(projectPath, workingDir) || '.'}...`);
+      execSync('go build ./...', { cwd: workingDir, encoding: 'utf8' });
       return { success: true, errors: [], warnings: [] };
     } else if (fsSync.existsSync(packageJsonPath)) {
       console.log('   🔨 Building TypeScript/Node project...');
@@ -329,12 +331,13 @@ async function runTestSuite(projectPath: string, actualChanges: boolean): Promis
 
   try {
     // Detect project type and run tests
-    const goModPath = path.join(projectPath, 'go.mod');
+    const goProject = detectGoProject(projectPath);
     const packageJsonPath = path.join(projectPath, 'package.json');
     
-    if (fsSync.existsSync(goModPath)) {
-      console.log('   🧪 Running Go tests...');
-      const output = execSync('go test ./... -v', { cwd: projectPath, encoding: 'utf8' });
+    if (goProject.hasGoProject) {
+      const workingDir = goProject.workingDirectory!;
+      console.log(`   🧪 Running Go tests from: ${path.relative(projectPath, workingDir) || '.'}...`);
+      const output = execSync('go test ./... -v', { cwd: workingDir, encoding: 'utf8' });
       
       // Parse Go test output (simplified)
       const passed = (output.match(/PASS/g) || []).length;

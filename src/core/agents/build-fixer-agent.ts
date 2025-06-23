@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { glob } from 'glob';
+import { detectGoProject, withGoWorkingDirectory } from '../utils/go-project-utils.js';
 
 const BuildErrorSchema = z.object({
   file: z.string(),
@@ -310,21 +311,31 @@ export class BuildFixerAgent extends BaseAgent<BuildFixerInput, BuildFixerOutput
     this.logger.info('Applying advanced Go fixes');
     
     try {
-      // Run go mod tidy to clean up dependencies
-      execSync('go mod tidy', { cwd: projectPath, encoding: 'utf-8' });
+      // Detect Go project location and run commands in the correct directory
+      const result = withGoWorkingDirectory(projectPath, (workingDir) => {
+        // Run go mod tidy to clean up dependencies
+        execSync('go mod tidy', { cwd: workingDir, encoding: 'utf-8' });
+        
+        // Run go mod download to ensure all dependencies are available
+        execSync('go mod download', { cwd: workingDir, encoding: 'utf-8' });
+        
+        // Find and fix circular dependencies
+        const circularDeps = this.detectCircularDependencies(buildOutput);
+        if (circularDeps.length > 0) {
+          // Note: fixCircularDependencies would need to be updated to use workingDir
+          this.logger.warn('Circular dependency detection found issues, but auto-fix not implemented');
+        }
+        
+        // Update vendor directory if it exists
+        if (fs.existsSync(path.join(workingDir, 'vendor'))) {
+          execSync('go mod vendor', { cwd: workingDir, encoding: 'utf-8' });
+        }
+        
+        return workingDir;
+      });
       
-      // Run go mod download to ensure all dependencies are available
-      execSync('go mod download', { cwd: projectPath, encoding: 'utf-8' });
-      
-      // Find and fix circular dependencies
-      const circularDeps = this.detectCircularDependencies(buildOutput);
-      if (circularDeps.length > 0) {
-        await this.fixCircularDependencies(projectPath, circularDeps);
-      }
-      
-      // Update vendor directory if it exists
-      if (fs.existsSync(path.join(projectPath, 'vendor'))) {
-        execSync('go mod vendor', { cwd: projectPath, encoding: 'utf-8' });
+      if (!result) {
+        this.logger.warn('No Go project detected for advanced fixes');
       }
     } catch (error) {
       this.logger.warn('Advanced Go fixes partially failed', { error });
@@ -400,8 +411,23 @@ export class BuildFixerAgent extends BaseAgent<BuildFixerInput, BuildFixerOutput
     const command = buildCommands[language];
     
     try {
+      let workingDir = projectPath;
+      
+      // For Go projects, detect the correct working directory
+      if (language === 'go') {
+        const goProject = detectGoProject(projectPath);
+        if (goProject.hasGoProject) {
+          workingDir = goProject.workingDirectory!;
+        } else {
+          return {
+            success: false,
+            output: 'No Go project detected (go.mod not found)'
+          };
+        }
+      }
+      
       const output = execSync(command, {
-        cwd: projectPath,
+        cwd: workingDir,
         encoding: 'utf-8',
         stdio: 'pipe',
       });

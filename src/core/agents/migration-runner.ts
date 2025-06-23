@@ -7,6 +7,7 @@ import { VibeFlowConfig } from '../types/config.js';
 import { ConfigLoader } from '../utils/config-loader.js';
 import { VibeFlowPaths } from '../utils/file-paths.js';
 import { BuildFixerAgent, BuildError } from './build-fixer-agent.js';
+import { detectGoProject, withGoWorkingDirectory } from '../utils/go-project-utils.js';
 
 const execAsync = promisify(exec);
 
@@ -450,8 +451,17 @@ export class MigrationRunner {
     const startTime = Date.now();
     
     try {
+      // Detect Go project location
+      const goProject = detectGoProject(this.projectRoot);
+      if (!goProject.hasGoProject) {
+        throw new Error('No Go project detected (go.mod not found)');
+      }
+      
+      const workingDir = goProject.workingDirectory!;
+      console.log(`   🔍 Go module detected at: ${path.relative(this.projectRoot, workingDir) || '.'}`);
+      
       const { stdout, stderr } = await execAsync('go build ./...', {
-        cwd: this.projectRoot,
+        cwd: workingDir,
         timeout: 120000, // 2 minutes timeout
       });
       
@@ -515,8 +525,17 @@ export class MigrationRunner {
     const startTime = Date.now();
     
     try {
+      // Detect Go project location
+      const goProject = detectGoProject(this.projectRoot);
+      if (!goProject.hasGoProject) {
+        throw new Error('No Go project detected (go.mod not found)');
+      }
+      
+      const workingDir = goProject.workingDirectory!;
+      console.log(`   🔍 Running tests from: ${path.relative(this.projectRoot, workingDir) || '.'}`);
+      
       const { stdout, stderr } = await execAsync('go test -v -coverprofile=coverage.out ./...', {
-        cwd: this.projectRoot,
+        cwd: workingDir,
         timeout: 300000, // 5 minutes timeout
       });
       
@@ -620,14 +639,18 @@ export class MigrationRunner {
   }
 
   private async parseCoverageOutput(): Promise<number | undefined> {
-    const coverageFile = path.join(this.projectRoot, 'coverage.out');
+    // Try to find coverage.out in the Go module directory first
+    const goProject = detectGoProject(this.projectRoot);
+    const workingDir = goProject.hasGoProject ? goProject.workingDirectory! : this.projectRoot;
+    
+    const coverageFile = path.join(workingDir, 'coverage.out');
     if (!fs.existsSync(coverageFile)) {
       return undefined;
     }
 
     try {
       const { stdout } = await execAsync('go tool cover -func=coverage.out', {
-        cwd: this.projectRoot,
+        cwd: workingDir,
       });
       
       const totalLine = stdout.split('\n').find(line => line.includes('total:'));
