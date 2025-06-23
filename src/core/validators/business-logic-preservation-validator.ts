@@ -794,7 +794,7 @@ export class BusinessLogicPreservationValidator {
   }
 
   private assessOverallRisk(validationScores: any, detailedResults: any): any {
-    const averageScore = Object.values(validationScores).reduce((sum, score) => sum + (score as number), 0) / Object.values(validationScores).length;
+    const averageScore = Object.values(validationScores).reduce((sum: number, score) => sum + (score as number), 0) / Object.values(validationScores).length;
     
     if (averageScore < 0.6) {
       return {

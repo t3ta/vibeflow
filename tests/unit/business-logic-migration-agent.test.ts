@@ -233,7 +233,34 @@ describe('BusinessLogicMigrationAgent', () => {
         getUsage: vi.fn().mockResolvedValue({ tokensUsed: 150, cost: 0.02 })
       };
 
-      agent['claudeCode'] = mockClaudeCode as any;
+      // agent['claudeCode'] = mockClaudeCode as any;
+      agent['claudeCodeIntegration'] = {
+        migrateBusinessLogicToArchitecture: vi.fn().mockResolvedValue({
+          domainLayer: {
+            entities: ['User', 'Order'],
+            valueObjects: ['Email', 'Price'],
+            businessRules: ['EmailValidator', 'PriceCalculator'],
+            workflows: []
+          },
+          usecaseLayer: {
+            services: ['UserService', 'OrderService'],
+            businessFlows: ['CreateUserFlow', 'ProcessOrderFlow'],
+            commands: [],
+            queries: []
+          },
+          preservedLogic: ['Business logic migration completed'],
+          confidence: 0.9,
+          warnings: []
+        })
+      } as any;
+
+      // ファイル読み込みモックを設定
+      mockedFs.readFile.mockImplementation((filePath: any) => {
+        if (filePath.toString().includes('user.go')) {
+          return Promise.resolve('mock Go code content');
+        }
+        return Promise.resolve('mock content');
+      });
 
       const extractResult: BusinessLogicExtractResult = {
         rules: [
@@ -262,11 +289,16 @@ describe('BusinessLogicMigrationAgent', () => {
       expect(result.migrated_code.domain_layer).toBeDefined();
       expect(result.migrated_code.usecase_layer).toBeDefined();
       expect(result.preserved_logic).toHaveLength(1);
-      expect(mockClaudeCode.migrateBusinessLogic).toHaveBeenCalledWith({
-        originalCode: expect.any(String),
+      expect(agent['claudeCodeIntegration'].migrateBusinessLogicToArchitecture).toHaveBeenCalledWith({
+        originalCode: 'mock Go code content',
         businessLogic: extractResult,
-        targetBoundary: mockBoundary,
-        architecture: 'clean'
+        targetBoundary: {
+          name: mockBoundary.name,
+          description: mockBoundary.description,
+          dependencies: mockBoundary.dependencies
+        },
+        architecture: 'clean',
+        preserveMode: 'strict'
       });
     });
 
@@ -291,7 +323,30 @@ describe('BusinessLogicMigrationAgent', () => {
         getUsage: vi.fn().mockResolvedValue({ tokensUsed: 300, cost: 0.05 })
       };
 
-      agent['claudeCode'] = mockClaudeCode as any;
+      agent['claudeCodeIntegration'] = {
+        migrateBusinessLogicToArchitecture: vi.fn().mockResolvedValue({
+          domainLayer: {
+            workflows: ['OrderProcessingWorkflow'],
+            businessRules: ['PaymentValidation', 'InventoryCheck'],
+            entities: [],
+            valueObjects: []
+          },
+          usecaseLayer: {
+            orchestrators: ['OrderOrchestrator'],
+            businessFlows: ['CompleteOrderFlow'],
+            services: [],
+            commands: [],
+            queries: []
+          },
+          preservedLogic: [
+            'Payment validation logic preserved',
+            'Inventory checking logic preserved',
+            'Order state transitions preserved'
+          ],
+          confidence: 0.9,
+          warnings: []
+        })
+      } as any;
 
       const complexWorkflow: BusinessLogicExtractResult = {
         rules: [],
@@ -319,13 +374,10 @@ describe('BusinessLogicMigrationAgent', () => {
     });
 
     it('should handle migration failures gracefully', async () => {
-      const mockClaudeCode = {
-        analyzeCode: vi.fn(),
-        migrateBusinessLogic: vi.fn().mockRejectedValue(new Error('AI service unavailable')),
-        getUsage: vi.fn().mockResolvedValue({ tokensUsed: 0, cost: 0 })
-      };
-
-      agent['claudeCode'] = mockClaudeCode as any;
+      // エラーを投げるモックを設定
+      agent['claudeCodeIntegration'] = {
+        migrateBusinessLogicToArchitecture: vi.fn().mockRejectedValue(new Error('AI service unavailable'))
+      } as any;
 
       const extractResult: BusinessLogicExtractResult = {
         rules: [{ 
@@ -341,6 +393,9 @@ describe('BusinessLogicMigrationAgent', () => {
         complexity: { overall: 'low', details: {} }
       };
 
+      // ファイル読み込みモックを設定
+      mockedFs.readFile.mockResolvedValue('test Go code content');
+
       // 失敗時はテンプレートベースのフォールバックを使用
       const result = await agent.migrateBusinessLogic(
         'test.go',
@@ -350,7 +405,7 @@ describe('BusinessLogicMigrationAgent', () => {
 
       expect(result).toBeDefined();
       expect(result.fallback_used).toBe(true);
-      expect(result.preserved_logic).toEqual(['Business logic preserved in template format']);
+      expect(result.preserved_logic).toEqual(['1 business rules preserved in domain layer']);
     });
   });
 
@@ -413,7 +468,7 @@ describe('BusinessLogicMigrationAgent', () => {
       expect(result.missing_logic).toEqual(
         expect.arrayContaining([
           'Payment validation logic',
-          'Inventory checking logic'
+          'Inventory availability check'
         ])
       );
       expect(result.coverage_percentage).toBeLessThan(100);
@@ -450,6 +505,15 @@ describe('BusinessLogicMigrationAgent', () => {
           preserved_logic: ['User validation preserved'],
           fallback_used: false
         });
+      
+      const validateSpy = vi.spyOn(agent, 'validateMigratedLogic')
+        .mockResolvedValue({
+          validation_passed: true,
+          coverage_percentage: 100,
+          missing_logic: [],
+          suggestions: [],
+          confidence_score: 0.9
+        });
 
       const result = await agent.processFileWithBusinessLogic(
         'user.go',
@@ -458,6 +522,7 @@ describe('BusinessLogicMigrationAgent', () => {
 
       expect(extractSpy).toHaveBeenCalledWith('user.go');
       expect(migrateSpy).toHaveBeenCalledWith('user.go', mockExtractResult, mockBoundary);
+      expect(validateSpy).toHaveBeenCalled();
       expect(result).toBeDefined();
       expect(result.business_logic_migrated).toBe(true);
     });

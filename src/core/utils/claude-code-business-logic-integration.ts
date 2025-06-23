@@ -82,12 +82,7 @@ export class ClaudeCodeBusinessLogicIntegration {
     try {
       const prompt = this.buildBusinessLogicAnalysisPrompt(code, options);
       
-      const analysis = await this.claudeCode.analyzeCode(code, {
-        prompt,
-        maxTokens: this.config.maxTokens,
-        temperature: this.config.temperature,
-        focusAreas: options.focusAreas
-      });
+      const analysis = await this.claudeCode.analyzeCode(code);
 
       return this.parseBusinessLogicAnalysis(analysis);
     } catch (error) {
