@@ -67,19 +67,24 @@ export class RefactorAgent {
     const originalCode = await fs.readFile(file, 'utf8');
     
     const prompt = `
-Transform this ${this.detectLanguage(file)} code to clean architecture suitable for ${boundary.name} module:
+Transform this ${this.detectLanguage(file)} code to Domain-Driven Design architecture suitable for the "${boundary.name}" bounded context:
 
 ## Current Situation
 - File: ${file}
-- Target: migrate to internal/${boundary.name}/
-- Dependencies: ${boundary.dependencies.join(', ')}
+- Target bounded context: ${boundary.name}
+- Business capability: ${boundary.description}
+- Ubiquitous language terms: ${boundary.ubiquitousLanguage?.join(', ') || 'Not specified'}
+- Context dependencies: ${boundary.dependencies?.internal?.join(', ') || 'None'}
 
 ## Required Transformations
-1. Complete separation of domain logic and infrastructure layer
-2. Properly extract interfaces (dependency inversion)
-3. Change to testable structure
-4. Completely eliminate circular dependencies
-5. Eliminate primitive type dependencies with value objects
+1. **Preserve Business Language**: Use exact business terminology from the bounded context
+2. **Domain Layer Separation**: Extract pure business logic that captures domain rules and invariants
+3. **Application Services**: Create use cases that orchestrate domain operations
+4. **Infrastructure Independence**: Separate infrastructure concerns from business logic
+5. **Aggregate Boundaries**: Respect business transaction and consistency boundaries
+6. **Value Objects**: Model business concepts that don't have identity but have business rules
+
+IMPORTANT: Maintain the business meaning and terminology identified in this bounded context. Do not introduce technical abstractions that obscure business concepts.
 
 ## Output Format
 Return in JSON format:

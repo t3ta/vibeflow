@@ -100,11 +100,25 @@ export type BoundaryConfig = z.infer<typeof BoundaryConfigSchema>;
 export const DomainBoundarySchema = z.object({
   name: z.string(),
   description: z.string(),
+  ubiquitousLanguage: z.array(z.string()).optional(),
+  businessRules: z.array(z.string()).optional(),
+  directories: z.array(z.string()).optional(),
+  entities: z.array(z.string()).optional(),
+  apiEndpoints: z.array(z.string()).optional(),
   files: z.array(z.string()),
-  dependencies: z.array(z.string()),
+  dependencies: z.object({
+    internal: z.array(z.string()).optional(),
+    external: z.array(z.string()).optional(),
+  }).optional(),
   circular_dependencies: z.array(z.string()).optional(),
-  cohesion_score: z.number(),
-  coupling_score: z.number(),
+  metrics: z.object({
+    cohesion: z.number(),
+    coupling: z.number(),
+    complexity: z.string(),
+  }).optional(),
+  // Backward compatibility
+  cohesion_score: z.number().optional(),
+  coupling_score: z.number().optional(),
 });
 
 export const DomainMapSchema = z.object({
