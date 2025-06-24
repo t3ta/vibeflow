@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { RefactorAgent } from './refactor-agent';
-import { MetadataCache, FileMetadata, ProjectMetadata } from '../utils/metadata-cache';
-import { DomainBoundary } from '../types/config';
+import { RefactorAgent } from './refactor-agent.js';
+import { MetadataCache, FileMetadata, ProjectMetadata } from '../utils/metadata-cache.js';
+import { DomainBoundary } from '../types/config.js';
 
 /**
  * MetadataDrivenRefactorAgent - メタデータ駆動の効率的リファクタリング
