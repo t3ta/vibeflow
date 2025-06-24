@@ -261,7 +261,7 @@ export class BusinessLogicMigrationAgent {
         targetBoundary: {
           name: boundary.name,
           description: boundary.description,
-          dependencies: boundary.dependencies
+          dependencies: boundary.dependencies?.internal ?? []
         },
         architecture: 'clean' as const,
         preserveMode: 'strict' as const
@@ -277,7 +277,7 @@ export class BusinessLogicMigrationAgent {
           usecase_layer: migrationResult.usecaseLayer,
           infrastructure_layer: {
             repositories: this.extractRepositoriesFromDataAccess(extractedLogic.dataAccess),
-            adapters: this.extractAdaptersFromDependencies(boundary.dependencies)
+            adapters: this.extractAdaptersFromDependencies(boundary.dependencies?.internal ?? [])
           }
         },
         preserved_logic: migrationResult.preservedLogic || ['Business logic migration completed'],
@@ -323,7 +323,7 @@ export class BusinessLogicMigrationAgent {
         usecase_layer: usecaseLayer,
         infrastructure_layer: {
           repositories: this.extractRepositoriesFromDataAccess(extractedLogic.dataAccess),
-          adapters: this.extractAdaptersFromDependencies(boundary.dependencies)
+          adapters: this.extractAdaptersFromDependencies(boundary.dependencies?.internal ?? [])
         }
       },
       preserved_logic: this.generatePreservedLogicSummary(extractedLogic),

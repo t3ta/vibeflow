@@ -85,7 +85,10 @@ export class BoundaryAgent {
         name: moduleName,
         description: moduleConfig.description,
         files: moduleFiles.map(f => f.relativePath),
-        dependencies,
+        dependencies: {
+          internal: dependencies,
+          external: []
+        },
         circular_dependencies: circularDeps,
         cohesion_score: cohesionScore,
         coupling_score: couplingScore,
@@ -182,8 +185,8 @@ export class BoundaryAgent {
   }
 
   private calculateMetrics(boundaries: DomainBoundary[]) {
-    const totalCohesion = boundaries.reduce((sum, b) => sum + b.cohesion_score, 0);
-    const totalCoupling = boundaries.reduce((sum, b) => sum + b.coupling_score, 0);
+    const totalCohesion = boundaries.reduce((sum, b) => sum + (b.cohesion_score ?? 0), 0);
+    const totalCoupling = boundaries.reduce((sum, b) => sum + (b.coupling_score ?? 0), 0);
     
     const overallCohesion = boundaries.length > 0 ? totalCohesion / boundaries.length : 0;
     const overallCoupling = boundaries.length > 0 ? totalCoupling / boundaries.length : 0;

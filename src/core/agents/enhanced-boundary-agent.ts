@@ -195,7 +195,10 @@ export class EnhancedBoundaryAgent {
         name: moduleName,
         description: moduleConfig.description,
         files: moduleFiles.map(f => f.relativePath),
-        dependencies,
+        dependencies: {
+          internal: dependencies,
+          external: []
+        },
         circular_dependencies: circularDeps,
         cohesion_score: cohesionScore,
         coupling_score: couplingScore,
@@ -286,8 +289,8 @@ export class EnhancedBoundaryAgent {
   }
 
   private calculateBasicMetrics(boundaries: DomainBoundary[], totalFiles: number) {
-    const totalCohesion = boundaries.reduce((sum, b) => sum + b.cohesion_score, 0);
-    const totalCoupling = boundaries.reduce((sum, b) => sum + b.coupling_score, 0);
+    const totalCohesion = boundaries.reduce((sum, b) => sum + (b.cohesion_score ?? 0), 0);
+    const totalCoupling = boundaries.reduce((sum, b) => sum + (b.coupling_score ?? 0), 0);
     
     const overallCohesion = boundaries.length > 0 ? totalCohesion / boundaries.length : 0;
     const overallCoupling = boundaries.length > 0 ? totalCoupling / boundaries.length : 0;
@@ -305,7 +308,10 @@ export class EnhancedBoundaryAgent {
       name: auto.name,
       description: auto.description,
       files: auto.files,
-      dependencies: auto.dependency_clusters,
+      dependencies: {
+        internal: auto.dependency_clusters,
+        external: []
+      },
       circular_dependencies: [], // Would need additional analysis
       cohesion_score: auto.confidence, // Use confidence as proxy for cohesion
       coupling_score: Math.max(0, 1 - auto.confidence), // Inverse of confidence
@@ -349,7 +355,10 @@ export class EnhancedBoundaryAgent {
       name: auto.name,
       description: auto.description,
       files: auto.files,
-      dependencies: auto.dependency_clusters,
+      dependencies: {
+        internal: auto.dependency_clusters,
+        external: []
+      },
       circular_dependencies: [],
       cohesion_score: auto.confidence,
       coupling_score: Math.max(0, 1 - auto.confidence),

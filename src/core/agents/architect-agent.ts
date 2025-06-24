@@ -186,15 +186,15 @@ export class ArchitectAgent {
       lines_of_code: boundary.files.length * 100, // Rough estimate
       test_coverage: this.config.refactoring.quality_gates.test_coverage.current,
       cyclomatic_complexity: 5, // Default estimate
-      coupling_score: boundary.coupling_score,
-      cohesion_score: boundary.cohesion_score,
+      coupling_score: boundary.coupling_score ?? boundary.metrics?.coupling ?? 0,
+      cohesion_score: boundary.cohesion_score ?? boundary.metrics?.cohesion ?? 0,
     };
 
     const targetState: ModuleState = {
       ...currentState,
       test_coverage: this.config.refactoring.quality_gates.test_coverage.minimum,
-      coupling_score: Math.max(0, boundary.coupling_score - 0.3),
-      cohesion_score: Math.min(1, boundary.cohesion_score + 0.2),
+      coupling_score: Math.max(0, (boundary.coupling_score ?? boundary.metrics?.coupling ?? 0) - 0.3),
+      cohesion_score: Math.min(1, (boundary.cohesion_score ?? boundary.metrics?.cohesion ?? 0) + 0.2),
     };
 
     const refactoringActions = this.generateRefactoringActions(boundary, currentState, targetState);
@@ -224,7 +224,7 @@ export class ArchitectAgent {
       actions.push({
         type: 'extract_interface',
         description: `${boundary.name}モジュールの外部依存を削減するためのインターフェース抽出`,
-        files_affected: boundary.dependencies.slice(0, 3),
+        files_affected: (boundary.dependencies?.internal ?? []).slice(0, 3),
         priority: 'high',
         effort_estimate: '1-2週間',
       });
