@@ -25,6 +25,7 @@ import { BusinessLogicMigrationAgent } from './core/agents/business-logic-migrat
 import { TestSynthesisAgent } from './core/agents/test-synthesis-agent.js';
 import { handleResumeFlow } from './core/utils/checkpoint-manager.js';
 import { MetadataDrivenRefactorAgent } from './core/agents/metadata-driven-refactor-agent.js';
+import { MetricsCLI } from './core/utils/metrics-cli.js';
 
 // -----------------------------------------------------------------------------
 // Workflow execution functions
@@ -802,6 +803,74 @@ program
       
     } catch (error) {
       console.error(chalk.red('❌ メタデータ駆動リファクタリング失敗:'), error);
+      process.exit(1);
+    }
+  });
+
+// -----------------------------------------------------------------------------
+// Metrics Commands
+// -----------------------------------------------------------------------------
+
+program
+  .command('metrics')
+  .argument('[path]', 'target project root', '.')
+  .option('--run-id <id>', 'show details for specific run ID')
+  .option('--agent <name>', 'filter by agent name')
+  .option('--days <number>', 'number of days to include', '30')
+  .option('--limit <number>', 'maximum number of runs to show', '20')
+  .option('--export <format>', 'export data (csv|json)')
+  .option('--output <file>', 'output file path for export')
+  .option('--cleanup <days>', 'cleanup old data (retention days)')
+  .description('Show performance metrics and statistics')
+  .action(async (pathParam: string, opts: {
+    runId?: string;
+    agent?: string;
+    days?: string;
+    limit?: string;
+    export?: 'csv' | 'json';
+    output?: string;
+    cleanup?: string;
+  }) => {
+    try {
+      const absolutePath = path.resolve(pathParam);
+      const metricsCLI = new MetricsCLI(absolutePath);
+      
+      // Cleanup operation
+      if (opts.cleanup) {
+        const retentionDays = parseInt(opts.cleanup);
+        await metricsCLI.cleanup(retentionDays);
+        metricsCLI.close();
+        return;
+      }
+      
+      // Export operation
+      if (opts.export) {
+        const days = parseInt(opts.days || '30');
+        await metricsCLI.exportData(opts.export, opts.output, opts.agent, days);
+        metricsCLI.close();
+        return;
+      }
+      
+      // Show specific run details
+      if (opts.runId) {
+        const runId = parseInt(opts.runId);
+        await metricsCLI.showRunDetails(runId);
+        metricsCLI.close();
+        return;
+      }
+      
+      // Show run history
+      const limit = parseInt(opts.limit || '20');
+      await metricsCLI.showRunHistory(opts.agent, limit);
+      
+      // Show statistics
+      const days = parseInt(opts.days || '30');
+      await metricsCLI.showAgentStats(opts.agent, days);
+      
+      metricsCLI.close();
+      
+    } catch (error) {
+      console.error(chalk.red('❌ メトリクス取得失敗:'), error);
       process.exit(1);
     }
   });
