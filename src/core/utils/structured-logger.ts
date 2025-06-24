@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { PerformanceTracker, LogLevel } from './performance-tracker';
+import { PerformanceTracker, LogLevel } from './performance-tracker.js';
 
 /**
  * StructuredLogger - console.logの置き換え用構造化ログシステム

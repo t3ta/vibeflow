@@ -25,9 +25,13 @@ export class PerformanceTracker {
     // .vibeflowディレクトリの作成
     const dirPath = path.dirname(this.dbPath);
     try {
-      require('fs').mkdirSync(dirPath, { recursive: true });
+      const fs = require('fs');
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+      }
     } catch (error) {
       // ディレクトリが既に存在する場合は無視
+      console.warn('Failed to create directory:', error);
     }
     
     this.db = new Database(this.dbPath);

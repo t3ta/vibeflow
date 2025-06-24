@@ -1,5 +1,5 @@
-import { PerformanceTracker, ProcessingMethod } from './performance-tracker';
-import { StructuredLogger } from './structured-logger';
+import { PerformanceTracker, ProcessingMethod } from './performance-tracker.js';
+import { StructuredLogger } from './structured-logger.js';
 import { performance } from 'perf_hooks';
 
 /**

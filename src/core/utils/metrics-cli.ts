@@ -1,4 +1,4 @@
-import { PerformanceTracker, AgentRunSummary, PerformanceStats } from './performance-tracker';
+import { PerformanceTracker, AgentRunSummary, PerformanceStats } from './performance-tracker.js';
 import chalk from 'chalk';
 import fs from 'fs/promises';
 import path from 'path';
